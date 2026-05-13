@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: creditpath-postgres
+    environment:
+      POSTGRES_DB: creditpath
+      POSTGRES_USER: creditpath
+      POSTGRES_PASSWORD: creditpath
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U creditpath -d creditpath"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nlp:
+    build: ./nlp
+    container_name: creditpath-nlp
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  backend:
+    build: ./backend
+    container_name: creditpath-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nlp:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://creditpath:creditpath@postgres:5432/creditpath
+      NLP_URL: http://nlp:8000
+      JWT_SECRET: dev-secret-change-me
+      PORT: "4000"
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build: ./frontend
+    container_name: creditpath-frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  postgres_data:
