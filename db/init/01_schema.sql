@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TYPE rol AS ENUM ('estudiante', 'evaluador', 'administrador');
-CREATE TYPE estado_solicitud AS ENUM ('pendiente', 'aprobada', 'rechazada');
+CREATE TYPE estado_solicitud AS ENUM ('pendiente', 'aprobada', 'aprobada_parcial', 'rechazada');
 
 CREATE TABLE universidades (
   id SERIAL PRIMARY KEY,
@@ -14,6 +14,7 @@ CREATE TABLE carreras (
   universidad_id INTEGER NOT NULL REFERENCES universidades(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
   total_cre INTEGER,
+  plan_pdf TEXT,
   creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (universidad_id, nombre)
 );
@@ -23,6 +24,7 @@ CREATE TABLE materias (
   carrera_id INTEGER NOT NULL REFERENCES carreras(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
   cre INTEGER NOT NULL,
+  anio INTEGER,
   horas_interaccion INTEGER,
   horas_autonomo INTEGER,
   contenido_texto TEXT,
@@ -32,9 +34,21 @@ CREATE TABLE materias (
 
 CREATE INDEX materias_carrera_idx ON materias(carrera_id);
 
+CREATE TABLE materia_frases (
+  id SERIAL PRIMARY KEY,
+  materia_id INTEGER NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
+  indice SMALLINT NOT NULL,
+  frase TEXT NOT NULL,
+  embedding vector(384) NOT NULL
+);
+
+CREATE INDEX materia_frases_materia_idx ON materia_frases(materia_id);
+
 CREATE TABLE usuarios (
   id SERIAL PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
+  dni TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  email TEXT UNIQUE,
   nombre TEXT NOT NULL,
   rol rol NOT NULL,
   universidad_id INTEGER REFERENCES universidades(id) ON DELETE SET NULL,
@@ -77,3 +91,16 @@ CREATE TABLE items_solicitud (
 );
 
 CREATE INDEX items_solicitud_idx ON items_solicitud(solicitud_id);
+
+-- Retroalimentación del evaluador sobre las sugerencias (señal para re-ranking del NLP).
+CREATE TABLE retroalimentacion (
+  id SERIAL PRIMARY KEY,
+  materia_origen_id INTEGER NOT NULL REFERENCES materias(id),
+  materia_destino_id INTEGER NOT NULL REFERENCES materias(id),
+  util BOOLEAN,
+  decision estado_solicitud,
+  evaluador_id INTEGER REFERENCES usuarios(id),
+  creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX retro_par_idx ON retroalimentacion(materia_origen_id, materia_destino_id);

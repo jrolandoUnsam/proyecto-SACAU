@@ -1,0 +1,27 @@
+databases:
+  - name: creditpath-db
+    plan: free
+    databaseName: creditpath
+    user: creditpath
+
+services:
+  - type: web
+    name: creditpath-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: creditpath-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: HF_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"

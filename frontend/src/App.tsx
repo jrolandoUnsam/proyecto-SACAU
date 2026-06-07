@@ -9,6 +9,8 @@ import Cola from "./pages/evaluador/Cola";
 import ResolverSolicitud from "./pages/evaluador/ResolverSolicitud";
 import AdminCarreras from "./pages/admin/Carreras";
 import AdminMaterias from "./pages/admin/Materias";
+import PlanEstudios from "./pages/PlanEstudios";
+import Perfil from "./pages/Perfil";
 
 function Home() {
   const { user } = useAuth();
@@ -51,6 +53,11 @@ export default function App() {
               } />
               <Route path="/admin/materias" element={
                 <ProtectedRoute role="administrador"><AdminMaterias /></ProtectedRoute>
+              } />
+
+              <Route path="/plan-estudios" element={<PlanEstudios />} />
+              <Route path="/perfil" element={
+                <ProtectedRoute><Perfil /></ProtectedRoute>
               } />
 
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,7 +9,7 @@ import pdfplumber
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nlp")
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
 app = FastAPI(title="CreditPath NLP")
 
@@ -59,6 +59,25 @@ def _embed(text: str) -> list[float]:
 @app.post("/embed", response_model=EmbedResponse)
 def embed(req: EmbedRequest):
     return EmbedResponse(embedding=_embed(req.text))
+
+
+class EmbedBatchRequest(BaseModel):
+    texts: list[str]
+
+
+class EmbedBatchResponse(BaseModel):
+    embeddings: list[list[float]]
+
+
+@app.post("/embed-batch", response_model=EmbedBatchResponse)
+def embed_batch(req: EmbedBatchRequest):
+    if model is None:
+        raise HTTPException(status_code=503, detail="model not ready")
+    texts = [t.strip() for t in req.texts if t.strip()]
+    if not texts:
+        raise HTTPException(status_code=400, detail="texts vacío")
+    vecs = model.encode(texts, normalize_embeddings=True)
+    return EmbedBatchResponse(embeddings=[v.tolist() for v in vecs])
 
 
 @app.post("/embed-pdf", response_model=EmbedPdfResponse)

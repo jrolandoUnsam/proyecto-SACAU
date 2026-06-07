@@ -1,15 +1,18 @@
 import { NextFunction, Request, Response } from "express";
+import { QueryResultRow } from "pg";
 import jwt from "jsonwebtoken";
 
 export type Rol = "estudiante" | "evaluador" | "administrador";
 
-export interface AuthUser {
+export interface AuthUser extends QueryResultRow {
   id: number;
-  email: string;
+  dni: string;
   nombre: string;
   rol: Rol;
   universidad_id: number | null;
   carrera_id: number | null;
+  universidad_nombre: string | null;
+  carrera_nombre: string | null;
 }
 
 declare global {
@@ -35,11 +38,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     const decoded = jwt.verify(header.slice(7), JWT_SECRET) as AuthUser & { iat?: number; exp?: number };
     req.user = {
       id: decoded.id,
-      email: decoded.email,
+      dni: decoded.dni,
       nombre: decoded.nombre,
       rol: decoded.rol,
       universidad_id: decoded.universidad_id ?? null,
       carrera_id: decoded.carrera_id ?? null,
+      universidad_nombre: decoded.universidad_nombre ?? null,
+      carrera_nombre: decoded.carrera_nombre ?? null,
     };
     next();
   } catch {
