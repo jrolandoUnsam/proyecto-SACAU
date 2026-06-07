@@ -8,6 +8,7 @@ import materiasRouter from "./routes/materias";
 import historialRouter from "./routes/historial";
 import equivalenciasRouter from "./routes/equivalencias";
 import solicitudesRouter from "./routes/solicitudes";
+import perfilRouter from "./routes/perfil";
 import { runSeed } from "./seed";
 
 const app = express();
@@ -23,6 +24,7 @@ app.use("/api/materias", materiasRouter);
 app.use("/api/historial", historialRouter);
 app.use("/api/equivalencias", equivalenciasRouter);
 app.use("/api/solicitudes", solicitudesRouter);
+app.use("/api/perfil", perfilRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[error]", err);

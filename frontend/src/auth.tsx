@@ -6,17 +6,19 @@ export type Rol = "estudiante" | "evaluador" | "administrador";
 
 export interface User {
   id: number;
-  email: string;
+  dni: string;
   nombre: string;
   rol: Rol;
   universidad_id: number | null;
   carrera_id: number | null;
+  universidad_nombre: string | null;
+  carrera_nombre: string | null;
 }
 
 interface AuthCtx {
   user: User | null;
   loading: boolean;
-  login: (email: string) => Promise<User>;
+  login: (dni: string, password: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -42,8 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(email: string): Promise<User> {
-    const { data } = await api.post("/auth/login", { email });
+  async function login(dni: string, password: string): Promise<User> {
+    const { data } = await api.post("/auth/login", { dni, password });
     localStorage.setItem("token", data.token);
     localStorage.setItem("user", JSON.stringify(data.user));
     setUser(data.user);

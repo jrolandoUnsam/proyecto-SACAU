@@ -1,9 +1,25 @@
+import bcrypt from "bcryptjs";
 import { pool, query, vectorLiteral } from "./db";
-import { embedText } from "./nlp";
+import { embedText, embedBatch } from "./nlp";
+import { dividirFrases } from "./utils";
+import {
+  MATERIAS_NUTRICION_UNAHUR,
+  UNAHUR_UNIVERSIDAD,
+  UNAHUR_CARRERA,
+  UNAHUR_TOTAL_CRE,
+  UNAHUR_PLAN_PDF,
+} from "./data/nutricionUNAHUR";
+import {
+  MATERIAS_NUTRICION_BELGRANO,
+  BELGRANO_UNIVERSIDAD,
+  BELGRANO_CARRERA,
+  BELGRANO_TOTAL_CRE,
+} from "./data/nutricionBelgrano";
 
 type MateriaSeed = {
   nombre: string;
   cre: number;
+  anio?: number;
   horas_interaccion: number;
   horas_autonomo: number;
   contenido_texto: string;
@@ -12,6 +28,7 @@ type MateriaSeed = {
 type CarreraSeed = {
   nombre: string;
   total_cre: number;
+  plan_pdf?: string;
   materias: MateriaSeed[];
 };
 
@@ -22,136 +39,105 @@ type UniversidadSeed = {
 
 const DATA: UniversidadSeed[] = [
   {
-    nombre: "Universidad Tech Nacional",
+    nombre: UNAHUR_UNIVERSIDAD,
     carreras: [
       {
-        nombre: "Ingeniería en Sistemas",
-        total_cre: 240,
-        materias: [
-          {
-            nombre: "Algoritmos y Estructuras de Datos",
-            cre: 8,
-            horas_interaccion: 96,
-            horas_autonomo: 96,
-            contenido_texto:
-              "Introducción al análisis de algoritmos: complejidad temporal y espacial, notación asintótica O, Omega y Theta. Estructuras de datos lineales: arreglos, listas enlazadas, pilas y colas. Estructuras de datos no lineales: árboles binarios, árboles de búsqueda balanceados (AVL, rojo-negro), grafos. Algoritmos de búsqueda y ordenamiento: búsqueda binaria, quicksort, mergesort, heapsort. Tablas de hash. Recursión y programación dinámica. Algoritmos voraces. Recorridos en grafos: BFS, DFS, caminos mínimos (Dijkstra), árboles de expansión mínima.",
-          },
-          {
-            nombre: "Bases de Datos",
-            cre: 8,
-            horas_interaccion: 96,
-            horas_autonomo: 96,
-            contenido_texto:
-              "Modelo relacional y álgebra relacional. Diseño conceptual con modelo entidad-relación. Normalización: 1FN, 2FN, 3FN, Boyce-Codd. Lenguaje SQL: DDL, DML, DCL, consultas con joins, subconsultas, agregaciones y funciones de ventana. Transacciones y propiedades ACID. Concurrencia y control de bloqueos. Índices: B-tree, hash, bitmap. Procedimientos almacenados y triggers. Bases de datos no relacionales: documentales (MongoDB), clave-valor (Redis), columnares y de grafos. Introducción a bases de datos distribuidas y replicación.",
-          },
-          {
-            nombre: "Programación I",
-            cre: 6,
-            horas_interaccion: 72,
-            horas_autonomo: 72,
-            contenido_texto:
-              "Fundamentos de la programación imperativa y estructurada. Variables, tipos de datos primitivos, operadores y expresiones. Estructuras de control: condicionales y bucles. Funciones, parámetros, alcance y recursión. Arreglos y matrices. Cadenas de caracteres. Estructuras de datos básicas: registros y archivos. Introducción a la programación orientada a objetos: clases, objetos, encapsulamiento, herencia y polimorfismo. Manejo de errores y excepciones. Buenas prácticas de codificación y testing unitario.",
-          },
-          {
-            nombre: "Redes de Computadoras",
-            cre: 7,
-            horas_interaccion: 84,
-            horas_autonomo: 84,
-            contenido_texto:
-              "Modelo OSI y modelo TCP/IP. Capa física y de enlace: Ethernet, conmutación, VLAN. Capa de red: direccionamiento IP, subnetting, ruteo estático y dinámico, protocolos OSPF y BGP. Capa de transporte: TCP y UDP, control de flujo y congestión. Capa de aplicación: HTTP, DNS, SMTP, FTP. Seguridad en redes: firewalls, NAT, VPN, TLS. Redes inalámbricas WiFi 802.11. Introducción a redes definidas por software (SDN) y virtualización de funciones de red.",
-          },
-          {
-            nombre: "Análisis Matemático I",
-            cre: 8,
-            horas_interaccion: 96,
-            horas_autonomo: 96,
-            contenido_texto:
-              "Funciones de una variable real, dominio e imagen. Límites y continuidad. Derivada: definición, reglas de derivación, regla de la cadena. Aplicaciones de la derivada: máximos y mínimos, gráfica de funciones, optimización. Integral indefinida y definida, teorema fundamental del cálculo. Métodos de integración: por partes, sustitución, fracciones parciales. Aplicaciones de la integral: áreas, volúmenes, longitud de arco. Sucesiones y series numéricas. Series de potencia y Taylor.",
-          },
-        ],
+        nombre: UNAHUR_CARRERA,
+        total_cre: UNAHUR_TOTAL_CRE,
+        plan_pdf: UNAHUR_PLAN_PDF,
+        materias: MATERIAS_NUTRICION_UNAHUR,
       },
     ],
   },
   {
-    nombre: "Universidad del Litoral",
+    nombre: BELGRANO_UNIVERSIDAD,
     carreras: [
       {
-        nombre: "Licenciatura en Sistemas de Información",
-        total_cre: 230,
-        materias: [
-          {
-            nombre: "Algoritmos y Programación",
-            cre: 9,
-            horas_interaccion: 108,
-            horas_autonomo: 108,
-            contenido_texto:
-              "Diseño y análisis de algoritmos. Complejidad computacional, notación O. Estructuras de datos: listas, pilas, colas, árboles binarios de búsqueda, árboles balanceados, grafos. Algoritmos de ordenamiento: insertion, quicksort, mergesort, heapsort. Búsqueda binaria. Tablas hash. Recursión, programación dinámica y técnicas voraces. Recorridos de grafos: DFS y BFS. Algoritmos de caminos mínimos y árbol generador mínimo. Implementación en lenguajes orientados a objetos.",
-          },
-          {
-            nombre: "Datos y Bases de Datos",
-            cre: 9,
-            horas_interaccion: 108,
-            horas_autonomo: 108,
-            contenido_texto:
-              "Modelado conceptual de datos con diagramas entidad-relación. Modelo relacional, álgebra relacional. Normalización hasta forma normal de Boyce-Codd. SQL estándar: definición, manipulación y consulta de datos, joins, subconsultas, vistas, funciones de agregación. Transacciones ACID, control de concurrencia. Optimización de consultas e índices. Procedimientos almacenados, triggers. Introducción a NoSQL: documentos, clave-valor, grafos. Diseño físico y tuning de bases de datos.",
-          },
-          {
-            nombre: "Programación Estructurada",
-            cre: 6,
-            horas_interaccion: 72,
-            horas_autonomo: 72,
-            contenido_texto:
-              "Conceptos básicos de programación. Variables, tipos de datos, operadores. Estructuras de control: if/else, while, for. Funciones y subrutinas, paso de parámetros por valor y referencia. Arreglos unidimensionales y multidimensionales. Strings. Archivos secuenciales. Modularización y diseño descendente. Introducción al paradigma orientado a objetos. Manejo básico de excepciones. Pruebas unitarias y depuración.",
-          },
-          {
-            nombre: "Telecomunicaciones y Redes",
-            cre: 7,
-            horas_interaccion: 84,
-            horas_autonomo: 84,
-            contenido_texto:
-              "Arquitecturas de red por capas: OSI y TCP/IP. Medios de transmisión, codificación y modulación. Ethernet y tecnologías LAN, VLANs y conmutación. Direccionamiento IPv4 e IPv6, subneteo, ruteo dinámico (RIP, OSPF). TCP y UDP, control de flujo, congestión y errores. Servicios de aplicación: DNS, HTTP, correo electrónico. Seguridad: cifrado simétrico y asimétrico, TLS, firewalls, redes privadas virtuales. Redes inalámbricas y móviles.",
-          },
-          {
-            nombre: "Cálculo I",
-            cre: 8,
-            horas_interaccion: 96,
-            horas_autonomo: 96,
-            contenido_texto:
-              "Funciones reales de variable real. Límites de funciones y continuidad. Derivada y sus aplicaciones: optimización, análisis de funciones, regla de L'Hôpital. Integral definida e indefinida, teorema fundamental del cálculo. Técnicas de integración por sustitución, partes y fracciones simples. Aplicaciones al cálculo de áreas y volúmenes de revolución. Introducción a sucesiones y series numéricas.",
-          },
-        ],
+        nombre: BELGRANO_CARRERA,
+        total_cre: BELGRANO_TOTAL_CRE,
+        materias: MATERIAS_NUTRICION_BELGRANO,
       },
     ],
   },
 ];
 
 const USUARIOS: Array<{
+  dni: string;
+  password: string;
   email: string;
   nombre: string;
   rol: "estudiante" | "evaluador" | "administrador";
   universidad?: string;
   carrera?: string;
 }> = [
-  { email: "admin@creditpath.ar", nombre: "Lucía Admin", rol: "administrador" },
   {
-    email: "evaluador@litoral.edu.ar",
-    nombre: "Carlos Evaluador",
-    rol: "evaluador",
-    universidad: "Universidad del Litoral",
+    dni: "30000001",
+    password: "admin123",
+    email: "admin@belgrano.edu.ar",
+    nombre: "Patricia Admin (Belgrano)",
+    rol: "administrador",
+    universidad: BELGRANO_UNIVERSIDAD,
   },
   {
-    email: "ana@unstech.edu.ar",
+    dni: "30000002",
+    password: "admin123",
+    email: "admin@unahur.edu.ar",
+    nombre: "Marcos Admin (UNAHUR)",
+    rol: "administrador",
+    universidad: UNAHUR_UNIVERSIDAD,
+  },
+  {
+    dni: "28000002",
+    password: "eval123",
+    email: "evaluador@unahur.edu.ar",
+    nombre: "Carlos Evaluador",
+    rol: "evaluador",
+    universidad: UNAHUR_UNIVERSIDAD,
+  },
+  {
+    dni: "42000003",
+    password: "ana123",
+    email: "ana@belgrano.edu.ar",
     nombre: "Ana Estudiante",
     rol: "estudiante",
-    universidad: "Universidad Tech Nacional",
-    carrera: "Ingeniería en Sistemas",
+    universidad: UNAHUR_UNIVERSIDAD,
+    carrera: UNAHUR_CARRERA,
   },
 ];
 
-const HISTORIAL: Array<{ usuarioEmail: string; materiaNombre: string; nota: number; fecha: string }> = [
-  { usuarioEmail: "ana@unstech.edu.ar", materiaNombre: "Algoritmos y Estructuras de Datos", nota: 8, fecha: "2024-12-10" },
-  { usuarioEmail: "ana@unstech.edu.ar", materiaNombre: "Bases de Datos", nota: 9, fecha: "2025-07-15" },
-  { usuarioEmail: "ana@unstech.edu.ar", materiaNombre: "Programación I", nota: 7, fecha: "2024-07-20" },
+// Ana cursó en UNAHUR. Su historial refleja las materias de 1° y 2° año del plan 2025.
+const HISTORIAL: Array<{
+  usuarioEmail: string;
+  materiaNombre: string;
+  nota: number;
+  fecha: string;
+  materiaUniversidad?: string;
+  materiaCarrera?: string;
+}> = [
+  // ── 1° Año · Primer cuatrimestre (CRE del PDF: 3+4+3+6+6 = 22) ──────────────
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Cultura y alfabetización digital en la universidad", nota: 8, fecha: "2023-07-10", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Bioquímica",                                          nota: 7, fecha: "2023-07-12", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Introducción a la Nutrición",                         nota: 9, fecha: "2023-07-14", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Anátomo-Fisiología I",                                nota: 8, fecha: "2023-07-17", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Introducción a la Salud Comunitaria",                 nota: 7, fecha: "2023-07-19", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  // ── 1° Año · Segundo cuatrimestre (CRE: 4+6+6+6+6 = 28) ─────────────────────
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Idioma extranjero",                                   nota: 9, fecha: "2023-12-05", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Anátomo-Fisiología II",                               nota: 7, fecha: "2023-12-07", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Salud Comunitaria I",                                 nota: 8, fecha: "2023-12-10", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Bioquímica Aplicada",                                 nota: 7, fecha: "2023-12-12", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Fundamentos de la Nutrición",                         nota: 9, fecha: "2023-12-14", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  // ── 2° Año · Primer cuatrimestre (CRE: 3+9+5+6+6 = 29) ──────────────────────
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Microbiología",                                       nota: 8, fecha: "2024-07-08", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Salud Comunitaria II",                                nota: 7, fecha: "2024-07-10", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Introducción a la Tecnología de los Alimentos",       nota: 8, fecha: "2024-07-12", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Nutrición en la Infancia y la Adolescencia",          nota: 9, fecha: "2024-07-15", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Técnica en el Manejo de los Alimentos I",             nota: 7, fecha: "2024-07-17", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  // ── 2° Año · Segundo cuatrimestre (CRE: 3+3+9+4+6+6 = 31) ───────────────────
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Psicología",                                          nota: 9, fecha: "2024-12-03", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Antropología",                                        nota: 8, fecha: "2024-12-05", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Salud Comunitaria III",                               nota: 7, fecha: "2024-12-08", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Bromatología y Microbiología de los Alimentos",       nota: 8, fecha: "2024-12-10", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
+  { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Técnica en el Manejo de los Alimentos II",            nota: 9, fecha: "2024-12-12", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
 ];
 
 export async function runSeed(): Promise<void> {
@@ -179,8 +165,8 @@ export async function runSeed(): Promise<void> {
 
       for (const car of uni.carreras) {
         const c = await client.query(
-          "INSERT INTO carreras (universidad_id, nombre, total_cre) VALUES ($1, $2, $3) RETURNING id",
-          [u.rows[0].id, car.nombre, car.total_cre]
+          "INSERT INTO carreras (universidad_id, nombre, total_cre, plan_pdf) VALUES ($1, $2, $3, $4) RETURNING id",
+          [u.rows[0].id, car.nombre, car.total_cre, car.plan_pdf ?? null]
         );
         carreraIds.set(`${uni.nombre}::${car.nombre}`, c.rows[0].id);
 
@@ -188,19 +174,32 @@ export async function runSeed(): Promise<void> {
           console.log(`[seed] embedding: ${uni.nombre} / ${car.nombre} / ${mat.nombre}`);
           const embedding = await embedText(mat.contenido_texto);
           const m = await client.query(
-            `INSERT INTO materias (carrera_id, nombre, cre, horas_interaccion, horas_autonomo, contenido_texto, embedding)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::vector) RETURNING id`,
+            `INSERT INTO materias (carrera_id, nombre, cre, anio, horas_interaccion, horas_autonomo, contenido_texto, embedding)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector) RETURNING id`,
             [
               c.rows[0].id,
               mat.nombre,
               mat.cre,
+              mat.anio ?? null,
               mat.horas_interaccion,
               mat.horas_autonomo,
               mat.contenido_texto,
               vectorLiteral(embedding),
             ]
           );
-          materiaIds.set(`${uni.nombre}::${car.nombre}::${mat.nombre}`, m.rows[0].id);
+          const materiaId = m.rows[0].id;
+          materiaIds.set(`${uni.nombre}::${car.nombre}::${mat.nombre}`, materiaId);
+
+          const frases = dividirFrases(mat.contenido_texto);
+          if (frases.length > 0) {
+            const embedsFrases = await embedBatch(frases);
+            for (let i = 0; i < frases.length; i++) {
+              await client.query(
+                `INSERT INTO materia_frases (materia_id, indice, frase, embedding) VALUES ($1, $2, $3, $4::vector)`,
+                [materiaId, i, frases[i], vectorLiteral(embedsFrases[i])]
+              );
+            }
+          }
         }
       }
     }
@@ -209,20 +208,26 @@ export async function runSeed(): Promise<void> {
     for (const us of USUARIOS) {
       const uniId = us.universidad ? universidadIds.get(us.universidad) ?? null : null;
       const carId = us.universidad && us.carrera ? carreraIds.get(`${us.universidad}::${us.carrera}`) ?? null : null;
+      const passwordHash = bcrypt.hashSync(us.password, 10);
       const u = await client.query(
-        `INSERT INTO usuarios (email, nombre, rol, universidad_id, carrera_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [us.email, us.nombre, us.rol, uniId, carId]
+        `INSERT INTO usuarios (dni, password_hash, email, nombre, rol, universidad_id, carrera_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [us.dni, passwordHash, us.email, us.nombre, us.rol, uniId, carId]
       );
       usuarioIds.set(us.email, u.rows[0].id);
     }
 
     for (const h of HISTORIAL) {
       const usuarioId = usuarioIds.get(h.usuarioEmail);
-      const ana = USUARIOS.find((x) => x.email === h.usuarioEmail);
-      const materiaKey = `${ana?.universidad}::${ana?.carrera}::${h.materiaNombre}`;
+      const us = USUARIOS.find((x) => x.email === h.usuarioEmail);
+      const uniMat = h.materiaUniversidad ?? us?.universidad;
+      const carMat = h.materiaCarrera ?? us?.carrera;
+      const materiaKey = `${uniMat}::${carMat}::${h.materiaNombre}`;
       const materiaId = materiaIds.get(materiaKey);
-      if (!usuarioId || !materiaId) continue;
+      if (!usuarioId || !materiaId) {
+        console.warn(`[seed] no se encontró materia para historial: ${materiaKey}`);
+        continue;
+      }
       await client.query(
         `INSERT INTO historial_academico (usuario_id, materia_id, nota, fecha_aprobacion)
          VALUES ($1, $2, $3, $4)`,

@@ -7,7 +7,7 @@ interface Solicitud {
   numero_tramite: string;
   creada_en: string;
   estudiante_nombre: string;
-  estudiante_email: string;
+  estudiante_dni: string;
   carrera_destino_nombre: string;
   universidad_destino_nombre: string;
   total_items: number;
@@ -48,7 +48,7 @@ export default function Cola() {
                 <td className="p-3 font-mono">{s.numero_tramite}</td>
                 <td className="p-3">
                   <div>{s.estudiante_nombre}</div>
-                  <div className="text-xs text-slate-500">{s.estudiante_email}</div>
+                  <div className="text-xs text-slate-500">DNI {s.estudiante_dni}</div>
                 </td>
                 <td className="p-3">
                   <div>{s.carrera_destino_nombre}</div>

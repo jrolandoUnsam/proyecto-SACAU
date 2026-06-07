@@ -20,6 +20,19 @@ router.post("/", requireAuth, requireRole("estudiante"), async (req, res) => {
     return res.status(400).json({ error: "carrera_destino_id e items requeridos" });
   }
 
+  const existe = await query(
+    `SELECT numero_tramite FROM solicitudes_equivalencia
+     WHERE estudiante_id = $1 AND carrera_destino_id = $2 AND estado != 'rechazada'
+     LIMIT 1`,
+    [req.user!.id, carrera_destino_id]
+  );
+  if (existe.rows.length > 0) {
+    return res.status(409).json({
+      error: "Ya existe una solicitud activa para esta carrera",
+      numero_tramite: existe.rows[0].numero_tramite,
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -73,7 +86,7 @@ router.get("/mis", requireAuth, requireRole("estudiante"), async (req, res) => {
 router.get("/pendientes", requireAuth, requireRole("evaluador"), async (_req, res) => {
   const { rows } = await query(
     `SELECT s.id, s.numero_tramite, s.estado, s.creada_en,
-            est.nombre AS estudiante_nombre, est.email AS estudiante_email,
+            est.nombre AS estudiante_nombre, est.dni AS estudiante_dni,
             c.nombre AS carrera_destino_nombre, u.nombre AS universidad_destino_nombre,
             (SELECT COUNT(*) FROM items_solicitud i WHERE i.solicitud_id = s.id) AS total_items
      FROM solicitudes_equivalencia s
@@ -86,11 +99,28 @@ router.get("/pendientes", requireAuth, requireRole("evaluador"), async (_req, re
   res.json(rows);
 });
 
+router.get("/resueltas", requireAuth, requireRole("evaluador"), async (_req, res) => {
+  const { rows } = await query(
+    `SELECT s.id, s.numero_tramite, s.estado, s.creada_en, s.resuelta_en, s.comentario_resolucion,
+            est.nombre AS estudiante_nombre, est.dni AS estudiante_dni,
+            c.nombre AS carrera_destino_nombre, u.nombre AS universidad_destino_nombre,
+            (SELECT COUNT(*) FROM items_solicitud i WHERE i.solicitud_id = s.id) AS total_items
+     FROM solicitudes_equivalencia s
+     JOIN usuarios est ON est.id = s.estudiante_id
+     JOIN carreras c ON c.id = s.carrera_destino_id
+     JOIN universidades u ON u.id = c.universidad_id
+     WHERE s.estado != 'pendiente'
+     ORDER BY s.resuelta_en DESC`
+  );
+  res.json(rows);
+});
+
 router.get("/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const cab = await query(
     `SELECT s.id, s.numero_tramite, s.estado, s.creada_en, s.resuelta_en, s.comentario_resolucion,
             s.estudiante_id, est.nombre AS estudiante_nombre, est.email AS estudiante_email,
+            est.dni AS estudiante_dni,
             c.id AS carrera_destino_id, c.nombre AS carrera_destino_nombre,
             u.nombre AS universidad_destino_nombre,
             ev.nombre AS evaluador_nombre
@@ -130,29 +160,56 @@ router.get("/:id", requireAuth, async (req, res) => {
   res.json({ ...sol, items: items.rows });
 });
 
-// Evaluador resuelve la solicitud completa.
+// Evaluador resuelve la solicitud.
+// Body: { items_estado: { "<itemId>": "aprobada"|"rechazada", ... }, comentario?: string }
+// La solicitud queda: aprobada (todos aprobados) | rechazada (todos rechazados) | aprobada_parcial (mixto).
 router.put("/:id", requireAuth, requireRole("evaluador"), async (req, res) => {
   const id = Number(req.params.id);
-  const { estado, comentario } = req.body as { estado?: "aprobada" | "rechazada"; comentario?: string };
-  if (estado !== "aprobada" && estado !== "rechazada") {
-    return res.status(400).json({ error: "estado debe ser 'aprobada' o 'rechazada'" });
+  const { items_estado, comentario } = req.body as {
+    items_estado?: Record<string, "aprobada" | "rechazada">;
+    comentario?: string;
+  };
+
+  const entradas = Object.entries(items_estado ?? {});
+  if (!entradas.length) {
+    return res.status(400).json({ error: "items_estado requerido con al menos un ítem" });
   }
+  const valoresValidos = new Set(["aprobada", "rechazada"]);
+  for (const [, v] of entradas) {
+    if (!valoresValidos.has(v)) {
+      return res.status(400).json({ error: `estado inválido: ${v}` });
+    }
+  }
+
+  const valores = entradas.map(([, v]) => v);
+  const todoAprobado = valores.every((v) => v === "aprobada");
+  const todoRechazado = valores.every((v) => v === "rechazada");
+  const estadoFinal = todoAprobado ? "aprobada" : todoRechazado ? "rechazada" : "aprobada_parcial";
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    for (const [itemId, estado] of entradas) {
+      await client.query(
+        `UPDATE items_solicitud SET estado = $1 WHERE id = $2 AND solicitud_id = $3`,
+        [estado, Number(itemId), id]
+      );
+    }
+
     const upd = await client.query(
       `UPDATE solicitudes_equivalencia
        SET estado = $1, comentario_resolucion = $2, evaluador_id = $3, resuelta_en = NOW()
        WHERE id = $4 AND estado = 'pendiente'
        RETURNING id, estado`,
-      [estado, comentario?.trim() || null, req.user!.id, id]
+      [estadoFinal, comentario?.trim() || null, req.user!.id, id]
     );
+
     if (upd.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "solicitud no pendiente o inexistente" });
     }
-    await client.query(`UPDATE items_solicitud SET estado = $1 WHERE solicitud_id = $2`, [estado, id]);
+
     await client.query("COMMIT");
     res.json(upd.rows[0]);
   } catch (err: any) {

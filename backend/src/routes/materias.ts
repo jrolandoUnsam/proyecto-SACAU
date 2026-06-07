@@ -2,7 +2,8 @@ import { Router } from "express";
 import multer from "multer";
 import { query, vectorLiteral } from "../db";
 import { requireAuth, requireRole } from "../auth";
-import { embedPdf, embedText } from "../nlp";
+import { embedPdf, embedText, embedBatch } from "../nlp";
+import { dividirFrases } from "../utils";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -40,6 +41,19 @@ router.post("/", requireAuth, requireRole("administrador"), upload.single("pdf")
      RETURNING id, carrera_id, nombre, cre, horas_interaccion, horas_autonomo, contenido_texto`,
     [carrera_id, nombre, cre, horas_interaccion, horas_autonomo, contenido_texto, vectorLiteral(embedding)]
   );
+  const materiaId = rows[0].id;
+
+  const frases = dividirFrases(contenido_texto);
+  if (frases.length > 0) {
+    const embedsFrases = await embedBatch(frases);
+    for (let i = 0; i < frases.length; i++) {
+      await query(
+        `INSERT INTO materia_frases (materia_id, indice, frase, embedding) VALUES ($1, $2, $3, $4::vector)`,
+        [materiaId, i, frases[i], vectorLiteral(embedsFrases[i])]
+      );
+    }
+  }
+
   res.status(201).json(rows[0]);
 });
 

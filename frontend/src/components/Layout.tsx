@@ -30,6 +30,9 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <NavLink to="/estudiante/solicitudes" className={linkClass}>
                     Mis solicitudes
                   </NavLink>
+                  <NavLink to="/plan-estudios" className={linkClass}>
+                    Plan de Estudios
+                  </NavLink>
                 </>
               )}
               {user.rol === "evaluador" && (
@@ -47,9 +50,19 @@ export default function Layout({ children }: { children: ReactNode }) {
                   </NavLink>
                 </>
               )}
-              <span className="text-sm text-slate-600 ml-3">
-                {user.nombre} · <span className="italic">{user.rol}</span>
-              </span>
+              <NavLink
+                to="/perfil"
+                className={({ isActive }) =>
+                  `ml-3 text-sm text-slate-600 hover:text-slate-900 hover:underline leading-tight text-right ${isActive ? "font-semibold" : ""}`
+                }
+              >
+                <span className="block font-medium">{user.nombre}</span>
+                {(user.universidad_nombre || user.carrera_nombre) && (
+                  <span className="block text-xs text-slate-400">
+                    {[user.carrera_nombre, user.universidad_nombre].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </NavLink>
               <button
                 onClick={() => {
                   logout();

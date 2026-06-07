@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Julián\\\\OneDrive - Universidad de San Martin\\\\UNSAM\\\\3er año\\\\Ing. de Software\\\\TP Final\\\\frontend\\\\src\" -Recurse -File)",
+      "Bash(Select-Object FullName)"
+    ]
+  }
+}
