@@ -5,12 +5,14 @@ import SimilitudBadge from "../../components/SimilitudBadge";
 interface Solicitud {
   id: number;
   numero_tramite: string;
-  estado: "pendiente" | "aprobada" | "rechazada";
+  estado: "pendiente" | "aprobada" | "aprobada_parcial" | "rechazada" | "cancelada";
   creada_en: string;
   resuelta_en: string | null;
   comentario_resolucion: string | null;
   carrera_destino_nombre: string;
   universidad_destino_nombre: string;
+  carrera_origen_nombre: string | null;
+  universidad_origen_nombre: string | null;
   total_items: number;
 }
 
@@ -31,13 +33,26 @@ interface Detalle extends Solicitud {
 const estadoColor: Record<string, string> = {
   pendiente: "bg-yellow-100 text-yellow-800",
   aprobada: "bg-green-100 text-green-800",
+  aprobada_parcial: "bg-blue-100 text-blue-800",
   rechazada: "bg-red-100 text-red-800",
+  cancelada: "bg-slate-100 text-slate-500",
+};
+
+const estadoLabel: Record<string, string> = {
+  pendiente: "Pendiente",
+  aprobada: "Aprobada",
+  aprobada_parcial: "Aprobada parcialmente",
+  rechazada: "Rechazada",
+  cancelada: "Cancelada",
 };
 
 export default function MisSolicitudes() {
   const [items, setItems] = useState<Solicitud[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [detalle, setDetalle] = useState<Detalle | null>(null);
+  const [cancelando, setCancelando] = useState<number | null>(null);
+  const [comentarioCancelacion, setComentarioCancelacion] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   useEffect(() => {
     api.get("/solicitudes/mis").then((r) => setItems(r.data));
@@ -50,6 +65,24 @@ export default function MisSolicitudes() {
     setDetalle(data);
   }
 
+  function iniciarCancelacion(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
+    setCancelando(id);
+    setComentarioCancelacion("");
+  }
+
+  async function confirmarCancelacion(id: number) {
+    setCancelLoading(true);
+    try {
+      await api.patch(`/solicitudes/${id}/cancelar`, { comentario: comentarioCancelacion });
+      setItems((prev) => prev.map((s) => s.id === id ? { ...s, estado: "cancelada" as const, comentario_resolucion: comentarioCancelacion || null } : s));
+      if (open === id) { setOpen(null); setDetalle(null); }
+      setCancelando(null);
+    } finally {
+      setCancelLoading(false);
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Mis solicitudes</h1>
@@ -59,19 +92,77 @@ export default function MisSolicitudes() {
           <div key={s.id} className="bg-white rounded-lg shadow">
             <button
               onClick={() => expandir(s.id)}
-              className="w-full text-left p-4 flex items-center justify-between"
+              className="w-full text-left p-4"
             >
-              <div>
-                <div className="font-semibold">{s.numero_tramite}</div>
-                <div className="text-sm text-slate-500">
-                  {s.universidad_destino_nombre} — {s.carrera_destino_nombre} · {s.total_items} materias
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="font-mono text-sm font-semibold text-slate-700">{s.numero_tramite}</span>
+                    <span className="text-xs text-slate-400">Creada: {s.creada_en.slice(0, 10)}</span>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      {s.total_items} {Number(s.total_items) === 1 ? "materia" : "materias"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">Origen</div>
+                      <div className="text-xs font-semibold text-blue-900">{s.universidad_origen_nombre ?? "—"}</div>
+                      <div className="text-xs text-blue-600">{s.carrera_origen_nombre ?? "—"}</div>
+                    </div>
+                    <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                    <div className="bg-green-50 border border-green-200 rounded px-2 py-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-green-400">Destino</div>
+                      <div className="text-xs font-semibold text-green-900">{s.universidad_destino_nombre}</div>
+                      <div className="text-xs text-green-600">{s.carrera_destino_nombre}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-400">Creada: {s.creada_en.slice(0, 10)}</div>
+                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[s.estado]}`}>
+                    {estadoLabel[s.estado] ?? s.estado}
+                  </span>
+                  {s.estado === "pendiente" && cancelando !== s.id && (
+                    <button
+                      onClick={(e) => iniciarCancelacion(s.id, e)}
+                      className="text-xs text-red-500 hover:text-red-700 hover:underline"
+                    >
+                      Cancelar solicitud
+                    </button>
+                  )}
+                </div>
               </div>
-              <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[s.estado]}`}>
-                {s.estado}
-              </span>
             </button>
+
+            {/* Panel de cancelación inline */}
+            {cancelando === s.id && (
+              <div className="border-t border-red-100 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800 mb-2">¿Cancelar la solicitud {s.numero_tramite}?</p>
+                <textarea
+                  value={comentarioCancelacion}
+                  onChange={(e) => setComentarioCancelacion(e.target.value)}
+                  placeholder="Motivo de la cancelación (opcional)"
+                  rows={2}
+                  className="w-full border border-red-200 rounded px-3 py-2 text-sm mb-3 resize-none focus:outline-none focus:ring-1 focus:ring-red-300"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => confirmarCancelacion(s.id)}
+                    disabled={cancelLoading}
+                    className="bg-red-600 text-white text-sm rounded px-4 py-1.5 hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {cancelLoading ? "Cancelando…" : "Confirmar cancelación"}
+                  </button>
+                  <button
+                    onClick={() => setCancelando(null)}
+                    className="text-sm text-slate-600 hover:underline px-2"
+                  >
+                    Volver
+                  </button>
+                </div>
+              </div>
+            )}
             {open === s.id && detalle && (
               <div className="border-t p-4">
                 {detalle.evaluador_nombre && (
@@ -85,32 +176,37 @@ export default function MisSolicitudes() {
                     <b>Comentario:</b> {detalle.comentario_resolucion}
                   </div>
                 )}
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left">
-                      <th className="py-2">Mi materia</th>
-                      <th className="py-2">Materia destino</th>
-                      <th className="py-2">Similitud</th>
-                      <th className="py-2">Estado</th>
-                      <th className="py-2">Comentario</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detalle.items.map((i) => (
-                      <tr key={i.id} className="border-b last:border-0 align-top">
-                        <td className="py-2">{i.materia_origen_nombre}</td>
-                        <td className="py-2">{i.materia_destino_nombre}</td>
-                        <td className="py-2"><SimilitudBadge valor={Number(i.similitud)} /></td>
-                        <td className="py-2">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[i.estado]}`}>
-                            {i.estado}
-                          </span>
-                        </td>
-                        <td className="py-2 text-slate-600">{i.comentario || "–"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-3">
+                  {(() => {
+                    const porDestino = new Map<string, ItemDetalle[]>();
+                    for (const item of detalle.items) {
+                      if (!porDestino.has(item.materia_destino_nombre))
+                        porDestino.set(item.materia_destino_nombre, []);
+                      porDestino.get(item.materia_destino_nombre)!.push(item);
+                    }
+                    return Array.from(porDestino.entries()).map(([destNombre, grupo]) => (
+                      <div key={destNombre} className="border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="bg-slate-50 px-4 py-2 font-semibold text-slate-700 text-sm">
+                          {destNombre}
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                          {grupo.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                              <span className="flex-1 text-slate-800">{item.materia_origen_nombre}</span>
+                              <SimilitudBadge valor={Number(item.similitud)} />
+                              <span className={`px-2 py-0.5 rounded text-xs font-semibold ${estadoColor[item.estado]}`}>
+                                {item.estado}
+                              </span>
+                              {item.comentario && (
+                                <span className="text-slate-500 italic text-xs">{item.comentario}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             )}
           </div>

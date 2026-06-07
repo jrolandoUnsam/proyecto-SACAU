@@ -3,9 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 
 const DEMO = [
-  { dni: "42000003", pass: "ana123", label: "Ana Estudiante (Litoral)" },
+  { dni: "42000003", pass: "ana123", label: "Ana Estudiante (UNAHUR)" },
   { dni: "28000002", pass: "eval123", label: "Carlos Evaluador (UNAHUR)" },
-  { dni: "30000001", pass: "admin123", label: "Admin Litoral" },
   { dni: "30000002", pass: "admin123", label: "Admin UNAHUR" },
 ];
 
@@ -36,7 +35,7 @@ export default function Login() {
   return (
     <div className="min-h-full flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-1">CreditPath</h1>
+        <h1 className="text-2xl font-bold mb-1">SUCU</h1>
         <p className="text-sm text-slate-500 mb-6">Ingresá con tu DNI y contraseña</p>
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">

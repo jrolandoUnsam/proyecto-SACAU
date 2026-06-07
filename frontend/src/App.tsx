@@ -7,8 +7,11 @@ import Solicitar from "./pages/estudiante/Solicitar";
 import MisSolicitudes from "./pages/estudiante/MisSolicitudes";
 import Cola from "./pages/evaluador/Cola";
 import ResolverSolicitud from "./pages/evaluador/ResolverSolicitud";
+import HistorialEvaluador from "./pages/evaluador/Historial";
 import AdminCarreras from "./pages/admin/Carreras";
 import AdminMaterias from "./pages/admin/Materias";
+import SubirCarrera from "./pages/admin/SubirCarrera";
+import PlanCarrera from "./pages/admin/PlanCarrera";
 import PlanEstudios from "./pages/PlanEstudios";
 import Perfil from "./pages/Perfil";
 
@@ -47,12 +50,21 @@ export default function App() {
               <Route path="/evaluador/solicitud/:id" element={
                 <ProtectedRoute role="evaluador"><ResolverSolicitud /></ProtectedRoute>
               } />
+              <Route path="/evaluador/historial" element={
+                <ProtectedRoute role="evaluador"><HistorialEvaluador /></ProtectedRoute>
+              } />
 
               <Route path="/admin/carreras" element={
                 <ProtectedRoute role="administrador"><AdminCarreras /></ProtectedRoute>
               } />
               <Route path="/admin/materias" element={
                 <ProtectedRoute role="administrador"><AdminMaterias /></ProtectedRoute>
+              } />
+              <Route path="/admin/subir-carrera" element={
+                <ProtectedRoute role="administrador"><SubirCarrera /></ProtectedRoute>
+              } />
+              <Route path="/admin/plan/:id" element={
+                <ProtectedRoute role="administrador"><PlanCarrera /></ProtectedRoute>
               } />
 
               <Route path="/plan-estudios" element={<PlanEstudios />} />

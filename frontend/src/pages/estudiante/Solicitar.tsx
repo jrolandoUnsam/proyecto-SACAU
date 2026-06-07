@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../api";
 import SimilitudBadge from "../../components/SimilitudBadge";
 
-const UMBRAL_SUGERENCIA = 0.6;
+const UMBRAL_SUGERENCIA = 0.15;
 
 const ORDINALES = ["1°", "2°", "3°", "4°", "5°", "6°"];
 function labelAnio(n: number | null): string {
@@ -12,7 +12,7 @@ function labelAnio(n: number | null): string {
 }
 
 interface Universidad { id: number; nombre: string; }
-interface Carrera { id: number; nombre: string; universidad_id: number; }
+interface Carrera { id: number; nombre: string; universidad_id: number; plan_pdf?: string | null; }
 
 interface MateriaDestino {
   materia_destino_id: number;
@@ -377,7 +377,7 @@ export default function Solicitar() {
               {carreras.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </label>
-          <div className="flex items-end">
+          <div className="flex items-end gap-3">
             <button
               onClick={calcularSugerencias}
               disabled={!carId || loading}
@@ -385,6 +385,19 @@ export default function Solicitar() {
             >
               {loading ? "Cargando…" : "Cargar sugerencias"}
             </button>
+            {carId && (() => {
+              const carrera = carreras.find((c) => c.id === carId);
+              return carrera?.plan_pdf ? (
+                <a
+                  href={`/${carrera.plan_pdf}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-sky-700 underline underline-offset-2 hover:text-sky-900"
+                >
+                  Ver plan de estudios (PDF)
+                </a>
+              ) : null;
+            })()}
           </div>
         </div>
       </div>

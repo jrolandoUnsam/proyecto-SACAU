@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api";
 import SimilitudBadge from "../../components/SimilitudBadge";
-import { resaltar, terminosCompartidos } from "../../lib/contenido";
-import type { Segmento } from "../../lib/contenido";
 
 interface ItemDetalle {
   id: number;
   similitud: number;
   estado: "pendiente" | "aprobada" | "aprobada_parcial" | "rechazada";
   comentario: string | null;
+  nota_historial: number | null;
   materia_origen_id: number;
   materia_origen_nombre: string;
   cre_origen: number;
@@ -20,6 +19,7 @@ interface ItemDetalle {
   universidad_origen_nombre: string;
   materia_destino_id: number;
   materia_destino_nombre: string;
+  anio_destino: number | null;
   cre_destino: number;
   horas_int_destino: number | null;
   horas_aut_destino: number | null;
@@ -34,6 +34,7 @@ interface Detalle {
   estudiante_dni: string;
   carrera_destino_nombre: string;
   universidad_destino_nombre: string;
+  plan_pdf_origen: string | null;
   comentario_resolucion: string | null;
   items: ItemDetalle[];
 }
@@ -41,11 +42,15 @@ interface Detalle {
 interface Bloque {
   destinoId: number;
   destinoNombre: string;
+  anioDestino: number | null;
   creDestino: number;
   horasIntDestino: number | null;
   horasAutDestino: number | null;
+  contenidoDestino: string;
   items: ItemDetalle[];
 }
+
+type DecisionBloque = "aprobada" | "aprobada_parcial" | "rechazada";
 
 const estadoColor: Record<string, string> = {
   pendiente: "bg-yellow-100 text-yellow-800",
@@ -61,29 +66,117 @@ const estadoLabel: Record<string, string> = {
   rechazada: "Rechazada",
 };
 
-function TextoResaltado({ texto, compartidos }: { texto: string; compartidos: Set<string> }) {
-  const segs: Segmento[] = resaltar(texto, compartidos);
-  return (
-    <>
-      {segs.map((s, i) =>
-        s.hit ? (
-          <mark key={i} className="bg-yellow-200 font-semibold rounded px-0.5">
-            {s.text}
-          </mark>
-        ) : (
-          <span key={i}>{s.text}</span>
-        )
-      )}
-    </>
-  );
+const COLORES_PALETTE = [
+  "bg-sky-200",
+  "bg-yellow-200",
+  "bg-green-200",
+  "bg-fuchsia-200",
+];
+
+function ContenidoResaltado({ materiaOrigenId, materiaDestinoId, texto, colorClass = "bg-yellow-200" }: {
+  materiaOrigenId: number;
+  materiaDestinoId: number;
+  texto: string;
+  colorClass?: string;
+}) {
+  const [modo, setModo] = useState<"cargando" | "nlp" | "fallback">("cargando");
+  const [frases, setFrases] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!texto) { setModo("fallback"); return; }
+    setModo("cargando");
+    api.post("/equivalencias/resaltado", { materia_a_id: materiaOrigenId, materia_b_id: materiaDestinoId })
+      .then(({ data }) => {
+        setFrases(new Set<string>(data.frases_a));
+        setModo(data.frases_a.length > 0 ? "nlp" : "fallback");
+      })
+      .catch(() => setModo("fallback"));
+  }, [materiaOrigenId, materiaDestinoId, texto]);
+
+  if (modo === "cargando") return <p className="text-sm text-slate-400 italic">Analizando…</p>;
+
+  if (modo === "nlp") {
+    const partes = texto.split(/\.\s*/).map((s) => s.trim()).filter(Boolean);
+    return (
+      <p className="text-sm leading-relaxed">
+        {partes.map((f, i) => (
+          <span key={i}>
+            {frases.has(f) ? <mark className={`${colorClass} font-semibold rounded px-0.5`}>{f}</mark> : f}
+            {i < partes.length - 1 ? ". " : ""}
+          </span>
+        ))}
+      </p>
+    );
+  }
+
+  return <p className="text-sm leading-relaxed">{texto}</p>;
+}
+
+function ContenidoDestinoResaltado({ materiaDestinoId, texto, fuentes }: {
+  materiaDestinoId: number;
+  texto: string;
+  fuentes: { materiaOrigenId: number; colorClass: string }[];
+}) {
+  const [frasesMap, setFrasesMap] = useState<Map<string, string>>(new Map());
+  const [modo, setModo] = useState<"cargando" | "listo" | "fallback">("cargando");
+  const fuentesKey = useRef("");
+  const nuevaKey = fuentes.map((f) => f.materiaOrigenId).join(",");
+
+  useEffect(() => {
+    if (!texto || fuentes.length === 0) { setModo("fallback"); return; }
+    if (nuevaKey === fuentesKey.current && modo !== "cargando") return;
+    fuentesKey.current = nuevaKey;
+    setModo("cargando");
+
+    Promise.all(
+      fuentes.map(({ materiaOrigenId, colorClass }) =>
+        api.post("/equivalencias/resaltado", { materia_a_id: materiaDestinoId, materia_b_id: materiaOrigenId })
+          .then(({ data }) => ({ frases: data.frases_a as string[], colorClass }))
+          .catch(() => ({ frases: [] as string[], colorClass }))
+      )
+    ).then((resultados) => {
+      const mapa = new Map<string, string>();
+      for (const { frases, colorClass } of resultados)
+        for (const frase of frases)
+          if (!mapa.has(frase)) mapa.set(frase, colorClass);
+      setFrasesMap(mapa);
+      setModo("listo");
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto, nuevaKey]);
+
+  if (modo === "cargando") return <p className="text-sm text-slate-400 italic">Analizando…</p>;
+
+  if (modo === "listo") {
+    const partes = texto.split(/\.\s*/).map((s) => s.trim()).filter(Boolean);
+    return (
+      <p className="text-sm leading-relaxed">
+        {partes.map((f, i) => {
+          const color = frasesMap.get(f);
+          return (
+            <span key={i}>
+              {color ? <mark className={`${color} font-semibold rounded px-0.5`}>{f}</mark> : f}
+              {i < partes.length - 1 ? ". " : ""}
+            </span>
+          );
+        })}
+      </p>
+    );
+  }
+
+  return <p className="text-sm leading-relaxed">{texto}</p>;
 }
 
 export default function ResolverSolicitud() {
   const { id } = useParams();
   const nav = useNavigate();
   const [d, setD] = useState<Detalle | null>(null);
-  // decision[destinoId] = "aprobada" | "rechazada"
-  const [decision, setDecision] = useState<Record<number, "aprobada" | "rechazada">>({});
+  // decision por bloque (materia destino)
+  const [decision, setDecision] = useState<Record<number, DecisionBloque>>({});
+  // comentario por bloque
+  const [comentariosBloque, setComentariosBloque] = useState<Record<number, string>>({});
+  // nota por bloque (destinoId → nota string)
+  const [notasBloque, setNotasBloque] = useState<Record<number, string>>({});
   const [comentario, setComentario] = useState("");
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -101,9 +194,11 @@ export default function ResolverSolicitud() {
         map.set(it.materia_destino_id, {
           destinoId: it.materia_destino_id,
           destinoNombre: it.materia_destino_nombre,
+          anioDestino: it.anio_destino,
           creDestino: it.cre_destino,
           horasIntDestino: it.horas_int_destino,
           horasAutDestino: it.horas_aut_destino,
+          contenidoDestino: it.contenido_destino,
           items: [],
         });
       }
@@ -123,26 +218,37 @@ export default function ResolverSolicitud() {
   async function resolver() {
     if (!d) return;
 
-    // Verificar que todos los bloques tienen decisión
     const sinDecision = bloques.find((b) => !decision[b.destinoId]);
     if (sinDecision) {
-      setErr(`Falta decidir: ${sinDecision.destinoNombre}`);
+      setErr(`Falta decidir el bloque: ${sinDecision.destinoNombre}`);
       return;
     }
 
-    // Armar items_estado: cada item hereda la decisión de su bloque destino
-    const items_estado: Record<string, "aprobada" | "rechazada"> = {};
+    // Todos los ítems del bloque heredan la decisión y nota del bloque
+    const items_estado: Record<string, DecisionBloque> = {};
+    const comentarios_items: Record<string, string> = {};
+    const notas_items: Record<string, number | null> = {};
     for (const bloque of bloques) {
       const dec = decision[bloque.destinoId]!;
+      const textoComentario = comentariosBloque[bloque.destinoId]?.trim();
+      const notaStr = notasBloque[bloque.destinoId]?.trim();
+      const notaVal = notaStr ? parseFloat(notaStr) : null;
       for (const item of bloque.items) {
         items_estado[item.id] = dec;
+        if (textoComentario) comentarios_items[item.id] = textoComentario;
+        notas_items[item.id] = notaVal;
       }
     }
 
     setSaving(true);
     setErr(null);
     try {
-      await api.put(`/solicitudes/${d.id}`, { items_estado, comentario: comentario.trim() || undefined });
+      await api.put(`/solicitudes/${d.id}`, {
+        items_estado,
+        comentarios_items,
+        notas_items,
+        comentario: comentario.trim() || undefined,
+      });
       nav("/evaluador/cola");
     } catch (e: any) {
       setErr(e?.response?.data?.error || "Error al resolver la solicitud");
@@ -160,36 +266,105 @@ export default function ResolverSolicitud() {
     <div>
       {/* Encabezado */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Solicitud {d.numero_tramite}</h1>
-        <div className="text-sm text-slate-600 mt-1">
-          {d.estudiante_nombre}
-          {d.estudiante_dni ? ` (DNI ${d.estudiante_dni})` : ""} →{" "}
-          {d.universidad_destino_nombre} / {d.carrera_destino_nombre}
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold">Solicitud {d.numero_tramite}</h1>
+              {yaCerrada && (
+                <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[d.estado] ?? ""}`}>
+                  {estadoLabel[d.estado] ?? d.estado}
+                </span>
+              )}
+            </div>
+            <div className="text-sm text-slate-600">
+              {d.estudiante_nombre}
+              {d.estudiante_dni ? <span className="text-slate-400"> · DNI {d.estudiante_dni}</span> : null}
+            </div>
+          </div>
+          {d.plan_pdf_origen && (
+            <a
+              href={`/${d.plan_pdf_origen}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+              </svg>
+              Plan de estudios (PDF)
+            </a>
+          )}
         </div>
-        {yaCerrada && (
-          <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-semibold ${estadoColor[d.estado] ?? ""}`}>
-            {estadoLabel[d.estado] ?? d.estado}
-          </span>
-        )}
+
+        {/* Visual origen → destino */}
+        {(() => {
+          const primerItem = d.items[0];
+          const uniOrigen = primerItem?.universidad_origen_nombre ?? null;
+          const carreraOrigen = primerItem?.carrera_origen_nombre ?? null;
+          return (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-400 mb-0.5">Origen</div>
+                <div className="text-sm font-semibold text-blue-900 leading-tight">{uniOrigen ?? "—"}</div>
+                <div className="text-xs text-blue-600 leading-tight">{carreraOrigen ?? "—"}</div>
+              </div>
+              <svg className="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+              <div className="bg-green-50 border border-green-200 rounded px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-green-400 mb-0.5">Destino</div>
+                <div className="text-sm font-semibold text-green-900 leading-tight">{d.universidad_destino_nombre}</div>
+                <div className="text-xs text-green-600 leading-tight">{d.carrera_destino_nombre}</div>
+              </div>
+            </div>
+          );
+        })()}
+
         {yaCerrada && d.comentario_resolucion && (
-          <div className="mt-2 text-sm bg-slate-50 rounded p-3">
+          <div className="mt-3 text-sm bg-slate-50 rounded p-3">
             <b>Comentario:</b> {d.comentario_resolucion}
           </div>
         )}
       </div>
 
-      {/* Bloques por materia destino */}
-      <div className="space-y-4">
-        {bloques.map((bloque) => {
+      {/* Bloques agrupados por año del plan de estudios */}
+      {(() => {
+        // Agrupar bloques por año (null → "Sin año asignado")
+        const porAnio = new Map<number | null, Bloque[]>();
+        for (const b of bloques) {
+          const key = b.anioDestino ?? null;
+          if (!porAnio.has(key)) porAnio.set(key, []);
+          porAnio.get(key)!.push(b);
+        }
+        // Ordenar: años numéricos asc, null al final
+        const entradas = [...porAnio.entries()].sort(([a], [b]) => {
+          if (a === null) return 1;
+          if (b === null) return -1;
+          return a - b;
+        });
+        const anioPorNum: Record<number, string> = { 1: "1.er año", 2: "2.° año", 3: "3.er año", 4: "4.° año", 5: "5.° año" };
+        return entradas.map(([anio, grupo]) => (
+          <div key={anio ?? "sin-anio"} className="mb-6">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
+              <span className="h-px flex-1 bg-slate-200" />
+              {anio !== null ? (anioPorNum[anio] ?? `${anio}.° año`) : "Sin año asignado"}
+              <span className="h-px flex-1 bg-slate-200" />
+            </h2>
+            <div className="space-y-4">
+              {grupo.map((bloque) => {
           const abierto = expandidos.has(bloque.destinoId);
           const dec = decision[bloque.destinoId];
           const bestSim = Math.max(...bloque.items.map((it) => Number(it.similitud)));
-          // Cuando ya está cerrada, tomar el estado del primer item del bloque
           const estadoBloque = yaCerrada ? bloque.items[0]?.estado : undefined;
+
+          const fuentesDestino = bloque.items.map((it, i) => ({
+            materiaOrigenId: it.materia_origen_id,
+            colorClass: COLORES_PALETTE[i % COLORES_PALETTE.length],
+          }));
 
           return (
             <div key={bloque.destinoId} className="bg-white rounded-lg shadow overflow-hidden">
-              {/* Cabecera clickeable */}
+              {/* Cabecera */}
               <div
                 className="flex items-start justify-between p-4 cursor-pointer select-none hover:bg-slate-50"
                 onClick={() => toggle(bloque.destinoId)}
@@ -199,19 +374,14 @@ export default function ResolverSolicitud() {
                   <div className="text-xs text-slate-500 mt-0.5">
                     {bloque.creDestino} CRE ·{" "}
                     {bloque.items.length === 1
-                      ? `propuesta: ${bloque.items[0].materia_origen_nombre} (${bloque.items[0].universidad_origen_nombre})`
+                      ? bloque.items[0].materia_origen_nombre
                       : `${bloque.items.length} materias propuestas: ${bloque.items.map((it) => it.materia_origen_nombre).join(", ")}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {estadoBloque && (
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[estadoBloque] ?? ""}`}>
-                      {estadoLabel[estadoBloque] ?? estadoBloque}
-                    </span>
-                  )}
-                  {dec && !yaCerrada && (
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[dec]}`}>
-                      {estadoLabel[dec]}
+                  {(estadoBloque || dec) && (
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[estadoBloque ?? dec ?? ""] ?? ""}`}>
+                      {estadoLabel[estadoBloque ?? dec ?? ""] ?? estadoBloque ?? dec}
                     </span>
                   )}
                   <SimilitudBadge valor={bestSim} />
@@ -227,92 +397,160 @@ export default function ResolverSolicitud() {
               {/* Contenido expandido */}
               {abierto && (
                 <div className="border-t p-4 space-y-4">
-                  {bloque.items.map((it) => {
-                    const compartidos = terminosCompartidos(it.contenido_destino, it.contenido_origen);
-                    return (
-                      <div key={it.id}>
-                        <div className="text-xs text-slate-500 uppercase mb-2 font-medium">
-                          {it.materia_origen_nombre}
-                          <span className="text-slate-400"> — {it.universidad_origen_nombre} · {it.carrera_origen_nombre}</span>
-                          <span className="ml-2 normal-case font-normal">
-                            CRE {it.cre_origen} · <SimilitudBadge valor={Number(it.similitud)} />
-                          </span>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-3">
-                          <div className="border rounded p-3 bg-slate-50">
-                            <div className="text-xs text-slate-500 mb-1 font-medium uppercase">
-                              Destino — {bloque.destinoNombre}
-                            </div>
-                            <div className="text-xs text-slate-400 mb-2">
-                              {bloque.creDestino} CRE
-                              {bloque.horasIntDestino != null && ` · ${bloque.horasIntDestino}h interacción`}
-                              {bloque.horasAutDestino != null && ` · ${bloque.horasAutDestino}h autónomo`}
-                            </div>
-                            <p className="text-sm leading-relaxed">
-                              <TextoResaltado texto={it.contenido_destino} compartidos={compartidos} />
-                            </p>
-                          </div>
-                          <div className="border rounded p-3">
-                            <div className="text-xs text-slate-500 mb-1 font-medium uppercase">
-                              Origen — {it.materia_origen_nombre}
-                            </div>
-                            <div className="text-xs text-slate-400 mb-2">
-                              {it.cre_origen} CRE
-                              {it.horas_int_origen != null && ` · ${it.horas_int_origen}h interacción`}
-                              {it.horas_aut_origen != null && ` · ${it.horas_aut_origen}h autónomo`}
-                            </div>
-                            <p className="text-sm leading-relaxed">
-                              <TextoResaltado texto={it.contenido_origen} compartidos={compartidos} />
-                            </p>
-                          </div>
-                        </div>
+                  {/* Comparación lado a lado: destino (izq) | orígenes apilados (der) */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* Columna izquierda: materia destino (una sola vez) */}
+                    <div className="border rounded p-3 bg-slate-50 self-start">
+                      <div className="text-xs font-semibold uppercase text-slate-500 mb-1">
+                        Destino — {bloque.destinoNombre}
                       </div>
-                    );
-                  })}
+                      <div className="text-xs text-slate-400 mb-2">
+                        {bloque.creDestino} CRE
+                        {bloque.horasIntDestino != null && ` · ${bloque.horasIntDestino}h interacción`}
+                        {bloque.horasAutDestino != null && ` · ${bloque.horasAutDestino}h autónomo`}
+                      </div>
+                      <ContenidoDestinoResaltado
+                        materiaDestinoId={bloque.destinoId}
+                        texto={bloque.contenidoDestino}
+                        fuentes={fuentesDestino}
+                      />
+                    </div>
 
-                  {/* Decisión por bloque — solo cuando está pendiente */}
+                    {/* Columna derecha: materias del alumno apiladas */}
+                    <div className="space-y-3">
+                      {bloque.items.map((it, i) => {
+                        const colorClass = COLORES_PALETTE[i % COLORES_PALETTE.length];
+                        return (
+                          <div key={it.id} className="border rounded p-3">
+                            <div className="flex items-center justify-between mb-1 gap-2">
+                              <div className="text-xs font-semibold uppercase text-slate-600 leading-tight">
+                                {it.materia_origen_nombre}
+                              </div>
+                              <SimilitudBadge valor={Number(it.similitud)} />
+                            </div>
+                            <div className="text-xs text-slate-400 mb-2 flex items-center gap-2">
+                              <span>{it.universidad_origen_nombre} · {it.cre_origen} CRE</span>
+                              {it.nota_historial != null && (
+                                <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold">
+                                  Nota: {Number(it.nota_historial).toFixed(0)}
+                                </span>
+                              )}
+                            </div>
+                            <ContenidoResaltado
+                              materiaOrigenId={it.materia_origen_id}
+                              materiaDestinoId={bloque.destinoId}
+                              texto={it.contenido_origen}
+                              colorClass={colorClass}
+                            />
+                            {yaCerrada && it.comentario && (
+                              <div className="mt-2 text-xs italic text-slate-500">{it.comentario}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Comentario + decisión por bloque — solo cuando está pendiente */}
                   {!yaCerrada && (
-                    <div className="flex gap-2 pt-3 border-t">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDecision((p) => ({ ...p, [bloque.destinoId]: "aprobada" })); }}
-                        className={`rounded px-4 py-1.5 text-sm font-medium border-2 transition-colors ${
-                          dec === "aprobada"
-                            ? "bg-green-700 text-white border-green-700"
-                            : "bg-white text-green-700 border-green-300 hover:border-green-600"
-                        }`}
-                      >
-                        Aprobar equivalencia
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDecision((p) => ({ ...p, [bloque.destinoId]: "rechazada" })); }}
-                        className={`rounded px-4 py-1.5 text-sm font-medium border-2 transition-colors ${
-                          dec === "rechazada"
-                            ? "bg-red-700 text-white border-red-700"
-                            : "bg-white text-red-700 border-red-300 hover:border-red-600"
-                        }`}
-                      >
-                        Rechazar
-                      </button>
+                    <div className="pt-3 border-t space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">
+                          Comentario para este bloque (opcional)
+                        </label>
+                        <textarea
+                          value={comentariosBloque[bloque.destinoId] ?? ""}
+                          onChange={(e) =>
+                            setComentariosBloque((prev) => ({ ...prev, [bloque.destinoId]: e.target.value }))
+                          }
+                          rows={2}
+                          className="block w-full border border-slate-300 rounded px-3 py-2 text-sm"
+                          placeholder="Fundamento de la decisión para este bloque…"
+                        />
+                      </div>
+                      {/* Nota — se muestra solo si se va a aprobar (total o parcial) */}
+                      {(decision[bloque.destinoId] === "aprobada" || decision[bloque.destinoId] === "aprobada_parcial") && (
+                        <div className="flex items-center gap-3">
+                          <label className="text-xs font-medium text-slate-500 whitespace-nowrap">
+                            Nota de la equivalencia
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            step={0.5}
+                            value={notasBloque[bloque.destinoId] ?? (() => {
+                              const ref = bloque.items[0]?.nota_historial;
+                              return ref != null ? String(Math.round(Number(ref))) : "";
+                            })()}
+                            onChange={(e) =>
+                              setNotasBloque((prev) => ({ ...prev, [bloque.destinoId]: e.target.value }))
+                            }
+                            placeholder="Ej: 7"
+                            className="w-20 border border-slate-300 rounded px-2 py-1.5 text-sm text-center"
+                          />
+                          {bloque.items[0]?.nota_historial != null && (
+                            <span className="text-xs text-slate-400">
+                              (alumno aprobó con {Math.round(Number(bloque.items[0].nota_historial))})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDecision((p) => ({ ...p, [bloque.destinoId]: "aprobada" })); }}
+                          className={`rounded px-4 py-1.5 text-sm font-medium border-2 transition-colors ${
+                            dec === "aprobada"
+                              ? "bg-green-700 text-white border-green-700"
+                              : "bg-white text-green-700 border-green-300 hover:border-green-600"
+                          }`}
+                        >
+                          Aprobar equivalencia
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDecision((p) => ({ ...p, [bloque.destinoId]: "aprobada_parcial" })); }}
+                          className={`rounded px-4 py-1.5 text-sm font-medium border-2 transition-colors ${
+                            dec === "aprobada_parcial"
+                              ? "bg-blue-700 text-white border-blue-700"
+                              : "bg-white text-blue-700 border-blue-300 hover:border-blue-600"
+                          }`}
+                        >
+                          Aprobar parcialmente
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDecision((p) => ({ ...p, [bloque.destinoId]: "rechazada" })); }}
+                          className={`rounded px-4 py-1.5 text-sm font-medium border-2 transition-colors ${
+                            dec === "rechazada"
+                              ? "bg-red-700 text-white border-red-700"
+                              : "bg-white text-red-700 border-red-300 hover:border-red-600"
+                          }`}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
+              </div>
+            );
+          })}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        ));
+      })()}
 
       {/* Panel de resolución final */}
       {!yaCerrada && (
         <div className="mt-6 bg-white rounded-lg shadow p-4">
           <label className="block mb-3">
-            <span className="text-sm font-medium">Comentario de resolución (opcional)</span>
+            <span className="text-sm font-medium">Comentario general de resolución (opcional)</span>
             <textarea
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
               rows={3}
               className="mt-1 block w-full border border-slate-300 rounded px-3 py-2 text-sm"
-              placeholder="Fundamento de la resolución…"
+              placeholder="Fundamento general de la resolución…"
             />
           </label>
           {err && <div className="text-sm text-red-700 mb-3">{err}</div>}

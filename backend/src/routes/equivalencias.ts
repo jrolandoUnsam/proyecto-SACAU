@@ -27,12 +27,37 @@ router.get("/matriz", requireAuth, requireRole("estudiante"), async (req, res) =
   );
 
   const similitudes = await query(
-    `SELECT h.materia_id AS materia_origen_id, m2.id AS materia_destino_id,
-            1 - (mo.embedding <=> m2.embedding) AS similitud
-     FROM historial_academico h
-     JOIN materias mo ON mo.id = h.materia_id
-     JOIN materias m2 ON m2.carrera_id = $2
-     WHERE h.usuario_id = $1`,
+    `WITH
+     frases_o AS (
+       SELECT mf.id, mf.materia_id, mf.embedding
+       FROM materia_frases mf
+       WHERE mf.materia_id IN (
+         SELECT materia_id FROM historial_academico WHERE usuario_id = $1
+       )
+     ),
+     frases_d AS (
+       SELECT mf.id, mf.materia_id, mf.embedding
+       FROM materia_frases mf
+       WHERE mf.materia_id IN (SELECT id FROM materias WHERE carrera_id = $2)
+     ),
+     stats AS (
+       SELECT
+         fo.materia_id AS materia_origen_id,
+         fd.materia_id AS materia_destino_id,
+         COUNT(DISTINCT fo.id)                                                                              AS total_o,
+         COUNT(DISTINCT fd.id)                                                                              AS total_d,
+         COUNT(DISTINCT fo.id) FILTER (WHERE 1 - (fo.embedding <=> fd.embedding) >= 0.70)                  AS matched_o,
+         COUNT(DISTINCT fd.id) FILTER (WHERE 1 - (fo.embedding <=> fd.embedding) >= 0.70)                  AS matched_d
+       FROM frases_o fo
+       CROSS JOIN frases_d fd
+       GROUP BY fo.materia_id, fd.materia_id
+     )
+     SELECT materia_origen_id, materia_destino_id,
+            CASE WHEN total_d > 0
+                 THEN matched_d::float / total_d
+                 ELSE 0 END AS similitud
+     FROM stats
+     WHERE matched_d > 0`,
     [req.user!.id, carrera_destino_id]
   );
 
