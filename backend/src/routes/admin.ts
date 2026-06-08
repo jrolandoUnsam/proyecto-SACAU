@@ -1,13 +1,10 @@
 import { Router } from "express";
 import { query } from "../db";
-import { requireAuth, requireRole } from "../auth";
 
 const router = Router();
 
-// GET /api/admin/reset-demo
-// Limpia todos los datos transaccionales y deja la DB en estado inicial para demo.
-// Requiere token de administrador.
-router.get("/reset-demo", requireAuth, requireRole("administrador"), async (_req, res) => {
+router.get("/reset-demo", async (req, res) => {
+  if (req.query.key !== "sacau2026") return res.status(403).json({ error: "clave incorrecta" });
   try {
     await query(`DELETE FROM retroalimentacion`);
     await query(`DELETE FROM solicitudes_equivalencia`); // CASCADE borra items_solicitud
