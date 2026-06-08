@@ -6,7 +6,7 @@ Plataforma web para la gestión de créditos académicos (SACAU/CRE) y solicitud
 
 - **Frontend**: React + TypeScript + Vite + Tailwind
 - **Backend**: Node.js + Express + TypeScript
-- **NLP**: Python + FastAPI + sentence-transformers (`paraphrase-multilingual-MiniLM-L12-v2`)
+- **NLP**: Python + FastAPI + sentence-transformers (`paraphrase-multilingual-mpnet-base-v2`)
 - **DB**: PostgreSQL 16 + pgvector
 - **Orquestación**: Docker Compose
 
@@ -15,7 +15,7 @@ Plataforma web para la gestión de créditos académicos (SACAU/CRE) y solicitud
 Requisitos: Docker Desktop (Windows/Mac/Linux) con Compose v2.
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Primer build: ~5 minutos (descarga del modelo NLP, ~500 MB).
@@ -33,23 +33,46 @@ Abrir: **http://localhost:3000**
 
 ## Usuarios demo (pre-cargados)
 
-| Rol | Email |
-|---|---|
-| Administrador | `admin@creditpath.ar` |
-| Evaluador | `evaluador@litoral.edu.ar` |
-| Estudiante | `ana@unstech.edu.ar` |
+Login con **DNI + contraseña**.
 
-Login es mock: no pide password, solo el email.
+| Rol | DNI | Contraseña | Nombre |
+|---|---|---|---|
+| Administrador UNAHUR | `30000002` | `admin123` | Marcos Admin (UNAHUR) |
+| Administrador Belgrano | `30000001` | `admin123` | Patricia Admin (Belgrano) |
+| Evaluador | `28000002` | `eval123` | Carlos Evaluador |
+| Estudiante | `42000003` | `ana123` | Ana Estudiante |
 
-## Flujo end-to-end
+## Estado inicial del sistema
 
-1. Login como **estudiante** (`ana@unstech.edu.ar`) → ver historial con 3 materias aprobadas de Ingeniería en Sistemas.
-2. Ir a **Solicitar equivalencia** → elegir `Universidad del Litoral` → `Licenciatura en Sistemas de Información` → calcular. El sistema sugiere matches (similitudes > 70% para Algoritmos, Bases de Datos, Programación).
-3. Confirmar materias y enviar. Aparece número de trámite `EQ-2026-NNNNNN`.
-4. Logout y login como **evaluador** (`evaluador@litoral.edu.ar`) → ver la solicitud en la cola → entrar al detalle → ver comparativa lado a lado de cada par origen/destino → aprobar o rechazar con comentario opcional.
-5. Volver como **estudiante** → "Mis solicitudes" → ver el estado actualizado y el comentario del evaluador.
+Al arrancar, el seed carga:
 
-Como **administrador** podés crear universidades, carreras y materias adicionales (con PDF o texto manual). El embedding se genera automáticamente.
+- **Universidad de Belgrano** — Licenciatura en Nutrición completa (39 materias con embeddings).
+- **UNAHUR** — universidad creada pero sin carrera ni materias: el admin la carga subiendo el PDF.
+- **Ana** — estudiante asociada a UNAHUR, sin historial hasta que el admin sube el PDF.
+
+## Flujo end-to-end (demo)
+
+### 1. Admin sube el plan de estudios de UNAHUR
+
+Login como **Marcos Admin (UNAHUR)** → *Subir carrera* → seleccionar `Licenciatura-en-Nutricion_Hurlingham.pdf` → *Subir y procesar PDF*.
+
+El sistema extrae las materias del PDF, genera los embeddings (usa caché pre-computada: es instantáneo) y carga el historial académico de Ana con 20 materias aprobadas de 1° y 2° año.
+
+### 2. Estudiante solicita equivalencias
+
+Login como **Ana Estudiante** → *Mi historial* → ver 20 materias aprobadas de UNAHUR Nutrición.
+
+Ir a *Solicitar equivalencia* → elegir **Universidad de Belgrano** → **Licenciatura en Nutrición** → calcular. El sistema sugiere pares de materias con similitud semántica alta (Bioquímica, Anátomo-Fisiología, Nutrición, etc.).
+
+Confirmar las materias a pedir y enviar. Aparece el número de trámite `EQ-2026-NNNNNN`.
+
+### 3. Evaluador resuelve
+
+Login como **Carlos Evaluador** → *Solicitudes pendientes* → entrar al detalle → ver comparativa lado a lado de cada par origen/destino con similitud calculada → aprobar, rechazar o aprobar parcialmente con nota y comentario por ítem.
+
+### 4. Estudiante ve el resultado
+
+Volver como **Ana** → *Mi historial* → las materias equivalidas aparecen junto a las de UNAHUR, con nota y tipo "Equivalencia".
 
 ## Estructura
 
@@ -74,13 +97,13 @@ curl http://localhost:4000/api/health
 # Login
 curl -X POST http://localhost:4000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"ana@unstech.edu.ar"}'
+  -d '{"dni":"42000003","password":"ana123"}'
 ```
 
 ## Notas
 
-- El seed sólo corre si la tabla `universidades` está vacía. Para reseedear: `docker-compose down -v && docker-compose up --build`.
-- El servicio NLP precarga el modelo en build, por lo que el primer `up` toma tiempo pero arranca rápido. El healthcheck del compose hace esperar al backend hasta que el modelo esté listo.
+- El seed solo corre si la tabla `universidades` está vacía. Para resetear: `docker compose down -v && docker compose up --build`.
+- El servicio NLP precarga el modelo en build; el primer `up` tarda pero arranca rápido. El healthcheck del compose hace esperar al backend hasta que el modelo esté listo.
 - Auth es JWT firmado con un secret de dev. No usar en producción.
 
 ## Fuera de alcance (no incluido en MVP)
