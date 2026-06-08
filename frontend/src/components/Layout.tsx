@@ -15,7 +15,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link to="/" className="font-bold text-lg">
-            CreditPath
+            SUCU
           </Link>
           {user && (
             <nav className="flex items-center gap-2">
@@ -36,17 +36,22 @@ export default function Layout({ children }: { children: ReactNode }) {
                 </>
               )}
               {user.rol === "evaluador" && (
-                <NavLink to="/evaluador/cola" className={linkClass}>
-                  Cola de solicitudes
-                </NavLink>
+                <>
+                  <NavLink to="/evaluador/cola" className={linkClass}>
+                    Cola de solicitudes
+                  </NavLink>
+                  <NavLink to="/evaluador/historial" className={linkClass}>
+                    Historial
+                  </NavLink>
+                </>
               )}
               {user.rol === "administrador" && (
                 <>
                   <NavLink to="/admin/carreras" className={linkClass}>
-                    Carreras
+                    Mis carreras
                   </NavLink>
-                  <NavLink to="/admin/materias" className={linkClass}>
-                    Materias
+                  <NavLink to="/admin/subir-carrera" className={linkClass}>
+                    Subir carrera
                   </NavLink>
                 </>
               )}

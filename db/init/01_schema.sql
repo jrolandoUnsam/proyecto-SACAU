@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TYPE rol AS ENUM ('estudiante', 'evaluador', 'administrador');
-CREATE TYPE estado_solicitud AS ENUM ('pendiente', 'aprobada', 'aprobada_parcial', 'rechazada');
+CREATE TYPE estado_solicitud AS ENUM ('pendiente', 'aprobada', 'aprobada_parcial', 'rechazada', 'cancelada');
 
 CREATE TABLE universidades (
   id SERIAL PRIMARY KEY,
@@ -28,7 +28,7 @@ CREATE TABLE materias (
   horas_interaccion INTEGER,
   horas_autonomo INTEGER,
   contenido_texto TEXT,
-  embedding vector(384),
+  embedding vector(768),
   creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -39,7 +39,7 @@ CREATE TABLE materia_frases (
   materia_id INTEGER NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
   indice SMALLINT NOT NULL,
   frase TEXT NOT NULL,
-  embedding vector(384) NOT NULL
+  embedding vector(768) NOT NULL
 );
 
 CREATE INDEX materia_frases_materia_idx ON materia_frases(materia_id);
@@ -87,7 +87,8 @@ CREATE TABLE items_solicitud (
   materia_destino_id INTEGER NOT NULL REFERENCES materias(id),
   similitud NUMERIC(5,4) NOT NULL,
   estado estado_solicitud NOT NULL DEFAULT 'pendiente',
-  comentario TEXT
+  comentario TEXT,
+  nota NUMERIC(4,2)
 );
 
 CREATE INDEX items_solicitud_idx ON items_solicitud(solicitud_id);
@@ -104,3 +105,13 @@ CREATE TABLE retroalimentacion (
 );
 
 CREATE INDEX retro_par_idx ON retroalimentacion(materia_origen_id, materia_destino_id);
+
+-- Cache de embeddings pre-computados por nombre de materia.
+-- Permite que el upload-pdf reutilice embeddings sin llamar al NLP.
+CREATE TABLE embedding_cache (
+  id SERIAL PRIMARY KEY,
+  nombre TEXT NOT NULL UNIQUE,
+  embedding vector(768) NOT NULL,
+  frases TEXT[] NOT NULL DEFAULT '{}',
+  frases_embeddings vector(768)[] NOT NULL DEFAULT '{}'
+);

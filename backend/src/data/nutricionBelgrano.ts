@@ -8,6 +8,7 @@
 export const BELGRANO_UNIVERSIDAD = "Universidad de Belgrano";
 export const BELGRANO_CARRERA = "Licenciatura en Nutrición";
 export const BELGRANO_TOTAL_CRE = 274; // 59+60+60+60+35
+export const BELGRANO_PLAN_PDF = "Nutrucion_Belgrano.pdf";
 
 export const MATERIAS_NUTRICION_BELGRANO = [
   // ── 1.er AÑO · Semestre 1 ──────────────────────────────────────────────────

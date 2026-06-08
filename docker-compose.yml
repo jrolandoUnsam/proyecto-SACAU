@@ -43,6 +43,8 @@ services:
       JWT_SECRET: dev-secret-change-me
       PORT: "4000"
       NODE_ENV: production
+      # Opcional: si está definida, Claude la usa para procesar PDFs de otras universidades
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "4000:4000"
 

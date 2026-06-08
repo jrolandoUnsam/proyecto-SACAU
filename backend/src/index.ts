@@ -33,11 +33,12 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 const port = Number(process.env.PORT || 4000);
 
+app.listen(port, () => console.log(`[backend] Listening on ${port}`));
+
 (async () => {
   try {
     await runSeed();
   } catch (err) {
     console.error("[seed] error:", err);
   }
-  app.listen(port, () => console.log(`[backend] Listening on ${port}`));
 })();

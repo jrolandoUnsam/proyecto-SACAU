@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { PoolClient } from "pg";
 import { pool, query, vectorLiteral } from "./db";
 import { embedText, embedBatch } from "./nlp";
 import { dividirFrases } from "./utils";
@@ -14,6 +15,7 @@ import {
   BELGRANO_UNIVERSIDAD,
   BELGRANO_CARRERA,
   BELGRANO_TOTAL_CRE,
+  BELGRANO_PLAN_PDF,
 } from "./data/nutricionBelgrano";
 
 type MateriaSeed = {
@@ -37,17 +39,12 @@ type UniversidadSeed = {
   carreras: CarreraSeed[];
 };
 
+// UNAHUR empieza sin carreras: el admin sube el PDF del plan de estudios
+// para que el sistema lo procese y genere las materias automáticamente.
 const DATA: UniversidadSeed[] = [
   {
     nombre: UNAHUR_UNIVERSIDAD,
-    carreras: [
-      {
-        nombre: UNAHUR_CARRERA,
-        total_cre: UNAHUR_TOTAL_CRE,
-        plan_pdf: UNAHUR_PLAN_PDF,
-        materias: MATERIAS_NUTRICION_UNAHUR,
-      },
-    ],
+    carreras: [],
   },
   {
     nombre: BELGRANO_UNIVERSIDAD,
@@ -55,6 +52,7 @@ const DATA: UniversidadSeed[] = [
       {
         nombre: BELGRANO_CARRERA,
         total_cre: BELGRANO_TOTAL_CRE,
+        plan_pdf: BELGRANO_PLAN_PDF,
         materias: MATERIAS_NUTRICION_BELGRANO,
       },
     ],
@@ -140,107 +138,204 @@ const HISTORIAL: Array<{
   { usuarioEmail: "ana@belgrano.edu.ar", materiaNombre: "Técnica en el Manejo de los Alimentos II",            nota: 9, fecha: "2024-12-12", materiaUniversidad: UNAHUR_UNIVERSIDAD, materiaCarrera: UNAHUR_CARRERA },
 ];
 
-export async function runSeed(): Promise<void> {
-  const { rows } = await query("SELECT COUNT(*)::int AS n FROM universidades");
-  if (rows[0].n > 0) {
-    console.log("[seed] base ya tiene datos, salteando seed");
-    return;
+async function seedEmbeddingCache(client: PoolClient): Promise<void> {
+  for (const mat of MATERIAS_NUTRICION_UNAHUR) {
+    const { rows } = await client.query(
+      `SELECT id FROM embedding_cache WHERE nombre = $1`,
+      [mat.nombre]
+    );
+    if (rows.length > 0) continue;
+
+    console.log(`[seed] cache embedding: ${mat.nombre}`);
+    const embedding = await embedText(mat.contenido_texto);
+    const frases = dividirFrases(mat.contenido_texto);
+    const frasesEmbeddings = frases.length > 0 ? await embedBatch(frases) : [];
+
+    await client.query(
+      `INSERT INTO embedding_cache (nombre, embedding, frases, frases_embeddings)
+       VALUES ($1, $2::vector, $3, $4)
+       ON CONFLICT (nombre) DO NOTHING`,
+      [
+        mat.nombre,
+        vectorLiteral(embedding),
+        frases,
+        frasesEmbeddings.map(vectorLiteral),
+      ]
+    );
   }
-  console.log("[seed] insertando datos iniciales...");
+}
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
 
-    const universidadIds = new Map<string, number>();
-    const carreraIds = new Map<string, number>();
-    const materiaIds = new Map<string, number>();
+export async function runSeed(): Promise<void> {
+  console.log("[seed] verificando datos iniciales...");
 
-    for (const uni of DATA) {
-      const u = await client.query(
-        "INSERT INTO universidades (nombre) VALUES ($1) RETURNING id",
-        [uni.nombre]
-      );
-      universidadIds.set(uni.nombre, u.rows[0].id);
+  // ── FASE 1: universidades + carreras (esqueleto) + usuarios ─────────────────
+  // Commit rápido para que el login funcione mientras los embeddings se computan.
+  const universidadIds = new Map<string, number>();
+  const carreraIds = new Map<string, number>();
 
-      for (const car of uni.carreras) {
-        const c = await client.query(
-          "INSERT INTO carreras (universidad_id, nombre, total_cre, plan_pdf) VALUES ($1, $2, $3, $4) RETURNING id",
-          [u.rows[0].id, car.nombre, car.total_cre, car.plan_pdf ?? null]
+  {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const uni of DATA) {
+        const u = await client.query(
+          `INSERT INTO universidades (nombre) VALUES ($1)
+           ON CONFLICT (nombre) DO UPDATE SET nombre = EXCLUDED.nombre
+           RETURNING id`,
+          [uni.nombre]
         );
-        carreraIds.set(`${uni.nombre}::${car.nombre}`, c.rows[0].id);
+        const uniId = u.rows[0].id;
+        universidadIds.set(uni.nombre, uniId);
 
-        for (const mat of car.materias) {
-          console.log(`[seed] embedding: ${uni.nombre} / ${car.nombre} / ${mat.nombre}`);
-          const embedding = await embedText(mat.contenido_texto);
+        for (const car of uni.carreras) {
+          const c = await client.query(
+            `INSERT INTO carreras (universidad_id, nombre, total_cre, plan_pdf)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (universidad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre
+             RETURNING id`,
+            [uniId, car.nombre, car.total_cre, car.plan_pdf ?? null]
+          );
+          carreraIds.set(`${uni.nombre}::${car.nombre}`, c.rows[0].id);
+        }
+      }
+
+      for (const us of USUARIOS) {
+        const uniId = us.universidad ? universidadIds.get(us.universidad) ?? null : null;
+        const carId = us.universidad && us.carrera ? carreraIds.get(`${us.universidad}::${us.carrera}`) ?? null : null;
+        const passwordHash = bcrypt.hashSync(us.password, 10);
+        const u = await client.query(
+          `INSERT INTO usuarios (dni, password_hash, email, nombre, rol, universidad_id, carrera_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (dni) DO NOTHING
+           RETURNING id`,
+          [us.dni, passwordHash, us.email, us.nombre, us.rol, uniId, carId]
+        );
+        if (u.rows.length === 0 && carId) {
+          const { rows } = await client.query(`SELECT id FROM usuarios WHERE dni = $1`, [us.dni]);
+          if (rows.length > 0) {
+            await client.query(`UPDATE usuarios SET carrera_id = $1 WHERE id = $2 AND carrera_id IS NULL`, [carId, rows[0].id]);
+          }
+        }
+      }
+
+      await client.query("COMMIT");
+      console.log("[seed] Fase 1 completada: universidades, carreras y usuarios listos");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ── FASE 2: embeddings de materias de Belgrano ──────────────────────────────
+  // Cada materia en su propia transacción para no bloquear.
+  const materiaIds = new Map<string, number>();
+
+  for (const uni of DATA) {
+    const uniId = universidadIds.get(uni.nombre)!;
+    for (const car of uni.carreras) {
+      const carreraId = carreraIds.get(`${uni.nombre}::${car.nombre}`)!;
+
+      const { rows: existingMats } = await query(
+        `SELECT nombre, id FROM materias WHERE carrera_id = $1`,
+        [carreraId]
+      );
+      const existingMap = new Map(existingMats.map((r: { nombre: string; id: number }) => [r.nombre, r.id]));
+
+      for (const mat of car.materias) {
+        const key = `${uni.nombre}::${car.nombre}::${mat.nombre}`;
+        if (existingMap.has(mat.nombre)) {
+          materiaIds.set(key, existingMap.get(mat.nombre)!);
+          continue;
+        }
+
+        console.log(`[seed] embedding: ${uni.nombre} / ${car.nombre} / ${mat.nombre}`);
+        const embedding = await embedText(mat.contenido_texto);
+        const frases = dividirFrases(mat.contenido_texto);
+        const embedsFrases = frases.length > 0 ? await embedBatch(frases) : [];
+
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
           const m = await client.query(
             `INSERT INTO materias (carrera_id, nombre, cre, anio, horas_interaccion, horas_autonomo, contenido_texto, embedding)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector) RETURNING id`,
-            [
-              c.rows[0].id,
-              mat.nombre,
-              mat.cre,
-              mat.anio ?? null,
-              mat.horas_interaccion,
-              mat.horas_autonomo,
-              mat.contenido_texto,
-              vectorLiteral(embedding),
-            ]
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
+             RETURNING id`,
+            [carreraId, mat.nombre, mat.cre, mat.anio ?? null, mat.horas_interaccion, mat.horas_autonomo, mat.contenido_texto, vectorLiteral(embedding)]
           );
-          const materiaId = m.rows[0].id;
-          materiaIds.set(`${uni.nombre}::${car.nombre}::${mat.nombre}`, materiaId);
-
-          const frases = dividirFrases(mat.contenido_texto);
-          if (frases.length > 0) {
-            const embedsFrases = await embedBatch(frases);
+          if (m.rows.length > 0) {
+            const materiaId = m.rows[0].id;
+            materiaIds.set(key, materiaId);
             for (let i = 0; i < frases.length; i++) {
               await client.query(
-                `INSERT INTO materia_frases (materia_id, indice, frase, embedding) VALUES ($1, $2, $3, $4::vector)`,
+                `INSERT INTO materia_frases (materia_id, indice, frase, embedding)
+                 VALUES ($1, $2, $3, $4::vector) ON CONFLICT DO NOTHING`,
                 [materiaId, i, frases[i], vectorLiteral(embedsFrases[i])]
               );
             }
           }
+          await client.query("COMMIT");
+        } catch (err) {
+          await client.query("ROLLBACK");
+          throw err;
+        } finally {
+          client.release();
         }
       }
     }
-
-    const usuarioIds = new Map<string, number>();
-    for (const us of USUARIOS) {
-      const uniId = us.universidad ? universidadIds.get(us.universidad) ?? null : null;
-      const carId = us.universidad && us.carrera ? carreraIds.get(`${us.universidad}::${us.carrera}`) ?? null : null;
-      const passwordHash = bcrypt.hashSync(us.password, 10);
-      const u = await client.query(
-        `INSERT INTO usuarios (dni, password_hash, email, nombre, rol, universidad_id, carrera_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [us.dni, passwordHash, us.email, us.nombre, us.rol, uniId, carId]
-      );
-      usuarioIds.set(us.email, u.rows[0].id);
-    }
-
-    for (const h of HISTORIAL) {
-      const usuarioId = usuarioIds.get(h.usuarioEmail);
-      const us = USUARIOS.find((x) => x.email === h.usuarioEmail);
-      const uniMat = h.materiaUniversidad ?? us?.universidad;
-      const carMat = h.materiaCarrera ?? us?.carrera;
-      const materiaKey = `${uniMat}::${carMat}::${h.materiaNombre}`;
-      const materiaId = materiaIds.get(materiaKey);
-      if (!usuarioId || !materiaId) {
-        console.warn(`[seed] no se encontró materia para historial: ${materiaKey}`);
-        continue;
-      }
-      await client.query(
-        `INSERT INTO historial_academico (usuario_id, materia_id, nota, fecha_aprobacion)
-         VALUES ($1, $2, $3, $4)`,
-        [usuarioId, materiaId, h.nota, h.fecha]
-      );
-    }
-
-    await client.query("COMMIT");
-    console.log("[seed] Seed completado");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
   }
+
+  // ── FASE 3: historial académico de Ana ──────────────────────────────────────
+  {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const usuarioIds = new Map<string, number>();
+      for (const us of USUARIOS) {
+        const { rows } = await client.query(`SELECT id FROM usuarios WHERE dni = $1`, [us.dni]);
+        if (rows.length > 0) usuarioIds.set(us.email, rows[0].id);
+      }
+
+      for (const h of HISTORIAL) {
+        const usuarioId = usuarioIds.get(h.usuarioEmail);
+        const us = USUARIOS.find((x) => x.email === h.usuarioEmail);
+        const uniMat = h.materiaUniversidad ?? us?.universidad;
+        const carMat = h.materiaCarrera ?? us?.carrera;
+        const materiaKey = `${uniMat}::${carMat}::${h.materiaNombre}`;
+        const materiaId = materiaIds.get(materiaKey);
+        if (!usuarioId || !materiaId) {
+          console.warn(`[seed] no se encontró materia para historial: ${materiaKey}`);
+          continue;
+        }
+        await client.query(
+          `INSERT INTO historial_academico (usuario_id, materia_id, nota, fecha_aprobacion)
+           VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+          [usuarioId, materiaId, h.nota, h.fecha]
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ── FASE 4: embedding cache de UNAHUR ───────────────────────────────────────
+  {
+    const client = await pool.connect();
+    try {
+      await seedEmbeddingCache(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  console.log("[seed] Seed completado");
 }
