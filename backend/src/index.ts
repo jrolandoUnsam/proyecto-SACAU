@@ -9,6 +9,7 @@ import historialRouter from "./routes/historial";
 import equivalenciasRouter from "./routes/equivalencias";
 import solicitudesRouter from "./routes/solicitudes";
 import perfilRouter from "./routes/perfil";
+import adminRouter from "./routes/admin";
 import { runSeed } from "./seed";
 import { runMigrations } from "./migrate";
 
@@ -26,6 +27,7 @@ app.use("/api/historial", historialRouter);
 app.use("/api/equivalencias", equivalenciasRouter);
 app.use("/api/solicitudes", solicitudesRouter);
 app.use("/api/perfil", perfilRouter);
+app.use("/api/admin", adminRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[error]", err);
