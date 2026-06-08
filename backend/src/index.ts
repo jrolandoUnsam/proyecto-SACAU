@@ -10,6 +10,7 @@ import equivalenciasRouter from "./routes/equivalencias";
 import solicitudesRouter from "./routes/solicitudes";
 import perfilRouter from "./routes/perfil";
 import { runSeed } from "./seed";
+import { runMigrations } from "./migrate";
 
 const app = express();
 app.use(cors());
@@ -37,8 +38,9 @@ app.listen(port, () => console.log(`[backend] Listening on ${port}`));
 
 (async () => {
   try {
+    await runMigrations();
     await runSeed();
   } catch (err) {
-    console.error("[seed] error:", err);
+    console.error("[startup] error:", err);
   }
 })();
