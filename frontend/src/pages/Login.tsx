@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 
 const DEMO = [
   { dni: "42000003", pass: "ana123", label: "Ana Estudiante (UNAHUR)" },
-  { dni: "28000002", pass: "eval123", label: "Carlos Evaluador (UNAHUR)" },
+  { dni: "28000002", pass: "eval123", label: "Carlos Evaluador (BELGRANO)" },
   { dni: "30000002", pass: "admin123", label: "Admin UNAHUR" },
 ];
 
