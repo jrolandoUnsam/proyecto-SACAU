@@ -233,7 +233,10 @@ export default function ResolverSolicitud() {
       const dec = decision[bloque.destinoId]!;
       const textoComentario = comentariosBloque[bloque.destinoId]?.trim();
       const notaStr = notasBloque[bloque.destinoId]?.trim();
-      const notaVal = notaStr ? parseFloat(notaStr) : null;
+      const notaFallback = bloque.items[0]?.nota_historial != null
+        ? String(Math.round(Number(bloque.items[0].nota_historial)))
+        : null;
+      const notaVal = notaStr ? parseFloat(notaStr) : notaFallback ? parseFloat(notaFallback) : null;
       for (const item of bloque.items) {
         items_estado[item.id] = dec;
         if (textoComentario) comentarios_items[item.id] = textoComentario;
