@@ -453,7 +453,6 @@ export default function Solicitar() {
                         <div className="font-medium">{d.nombre}</div>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{d.cre} CRE</span>
-                          <span className="text-xs text-slate-400">carrera destino</span>
                         </div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {b.origenIds.length === 0 && (
