@@ -451,7 +451,10 @@ export default function Solicitar() {
                     >
                       <div className="min-w-0">
                         <div className="font-medium">{d.nombre}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{d.cre} CRE · carrera destino</div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{d.cre} CRE</span>
+                          <span className="text-xs text-slate-400">carrera destino</span>
+                        </div>
                         <div className="flex flex-wrap gap-1 mt-2">
                           {b.origenIds.length === 0 && (
                             <span className="text-xs text-slate-400 italic">Sin materias propias — agregá una al expandir</span>
@@ -522,8 +525,9 @@ export default function Solicitar() {
                                     </button>
                                   </div>
                                 </div>
-                                <div className="text-xs text-slate-500 mb-1">
-                                  {o.universidad_origen_nombre} · {o.cre} CRE
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="text-xs text-slate-500">{o.universidad_origen_nombre}</span>
+                                  <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{o.cre} CRE</span>
                                 </div>
                                 <ContenidoResaltado texto={o.contenido_texto || ""} materiaOrigenId={oId} materiaDestinoId={b.destinoId} colorClass={color.highlight} />
                               </div>

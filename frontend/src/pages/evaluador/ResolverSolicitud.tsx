@@ -35,6 +35,7 @@ interface Detalle {
   carrera_destino_nombre: string;
   universidad_destino_nombre: string;
   plan_pdf_origen: string | null;
+  plan_pdf_destino: string | null;
   comentario_resolucion: string | null;
   items: ItemDetalle[];
 }
@@ -281,19 +282,34 @@ export default function ResolverSolicitud() {
               {d.estudiante_dni ? <span className="text-slate-400"> · DNI {d.estudiante_dni}</span> : null}
             </div>
           </div>
-          {d.plan_pdf_origen && (
-            <a
-              href={`/${d.plan_pdf_origen}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-              </svg>
-              Plan de estudios (PDF)
-            </a>
-          )}
+          <div className="flex gap-2 flex-shrink-0 flex-wrap">
+            {d.plan_pdf_origen && (
+              <a
+                href={`/${d.plan_pdf_origen}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-300 bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                </svg>
+                Plan origen (PDF)
+              </a>
+            )}
+            {d.plan_pdf_destino && (
+              <a
+                href={`/${d.plan_pdf_destino}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-green-300 bg-green-50 text-green-700 text-xs font-medium hover:bg-green-100 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                </svg>
+                Plan destino (PDF)
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Visual origen → destino */}
@@ -371,11 +387,13 @@ export default function ResolverSolicitud() {
               >
                 <div className="flex-1 min-w-0 pr-3">
                   <div className="font-semibold">{bloque.destinoNombre}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {bloque.creDestino} CRE ·{" "}
-                    {bloque.items.length === 1
-                      ? bloque.items[0].materia_origen_nombre
-                      : `${bloque.items.length} materias propuestas: ${bloque.items.map((it) => it.materia_origen_nombre).join(", ")}`}
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{bloque.creDestino} CRE</span>
+                    <span className="text-xs text-slate-500">
+                      {bloque.items.length === 1
+                        ? bloque.items[0].materia_origen_nombre
+                        : `${bloque.items.length} materias propuestas: ${bloque.items.map((it) => it.materia_origen_nombre).join(", ")}`}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -404,10 +422,10 @@ export default function ResolverSolicitud() {
                       <div className="text-xs font-semibold uppercase text-slate-500 mb-1">
                         Destino — {bloque.destinoNombre}
                       </div>
-                      <div className="text-xs text-slate-400 mb-2">
-                        {bloque.creDestino} CRE
-                        {bloque.horasIntDestino != null && ` · ${bloque.horasIntDestino}h interacción`}
-                        {bloque.horasAutDestino != null && ` · ${bloque.horasAutDestino}h autónomo`}
+                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                        <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{bloque.creDestino} CRE</span>
+                        {bloque.horasIntDestino != null && <span className="text-xs text-slate-400">{bloque.horasIntDestino}h interacción</span>}
+                        {bloque.horasAutDestino != null && <span className="text-xs text-slate-400">{bloque.horasAutDestino}h autónomo</span>}
                       </div>
                       <ContenidoDestinoResaltado
                         materiaDestinoId={bloque.destinoId}
@@ -429,7 +447,8 @@ export default function ResolverSolicitud() {
                               <SimilitudBadge valor={Number(it.similitud)} />
                             </div>
                             <div className="text-xs text-slate-400 mb-2 flex items-center gap-2">
-                              <span>{it.universidad_origen_nombre} · {it.cre_origen} CRE</span>
+                              <span>{it.universidad_origen_nombre}</span>
+                              <span className="bg-violet-100 text-violet-800 text-xs font-bold px-2 py-0.5 rounded-full">{it.cre_origen} CRE</span>
                               {it.nota_historial != null && (
                                 <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold">
                                   Nota: {Number(it.nota_historial).toFixed(0)}
@@ -468,8 +487,8 @@ export default function ResolverSolicitud() {
                           placeholder="Fundamento de la decisión para este bloque…"
                         />
                       </div>
-                      {/* Nota — se muestra solo si se va a aprobar (total o parcial) */}
-                      {(decision[bloque.destinoId] === "aprobada" || decision[bloque.destinoId] === "aprobada_parcial") && (
+                      {/* Nota — se muestra solo al aprobar totalmente */}
+                      {decision[bloque.destinoId] === "aprobada" && (
                         <div className="flex items-center gap-3">
                           <label className="text-xs font-medium text-slate-500 whitespace-nowrap">
                             Nota de la equivalencia

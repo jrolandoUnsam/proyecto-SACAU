@@ -195,6 +195,7 @@ router.get("/:id", requireAuth, async (req, res) => {
             c.id AS carrera_destino_id, c.nombre AS carrera_destino_nombre,
             u.nombre AS universidad_destino_nombre,
             co.plan_pdf AS plan_pdf_origen,
+            c.plan_pdf AS plan_pdf_destino,
             ev.nombre AS evaluador_nombre
      FROM solicitudes_equivalencia s
      JOIN usuarios est ON est.id = s.estudiante_id
