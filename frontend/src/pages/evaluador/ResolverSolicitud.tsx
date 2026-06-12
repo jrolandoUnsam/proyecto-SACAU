@@ -508,11 +508,6 @@ export default function ResolverSolicitud() {
                             placeholder="Ej: 7"
                             className="w-20 border border-slate-300 rounded px-2 py-1.5 text-sm text-center"
                           />
-                          {bloque.items[0]?.nota_historial != null && (
-                            <span className="text-xs text-slate-400">
-                              (alumno aprobó con {Math.round(Number(bloque.items[0].nota_historial))})
-                            </span>
-                          )}
                         </div>
                       )}
                       <div className="flex gap-2 flex-wrap">
