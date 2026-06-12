@@ -120,8 +120,8 @@ export default function MisSolicitudes() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  <span className={`px-2 py-1 rounded text-xs font-semibold ${estadoColor[s.estado]}`}>
-                    {estadoLabel[s.estado] ?? s.estado}
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${s.estado === "pendiente" ? estadoColor.pendiente : s.estado === "cancelada" ? estadoColor.cancelada : s.estado === "rechazada" ? estadoColor.rechazada : estadoColor.aprobada}`}>
+                    {s.estado === "pendiente" ? "Pendiente" : s.estado === "cancelada" ? "Cancelada" : s.estado === "rechazada" ? "Rechazada" : "Finalizada"}
                   </span>
                   {s.estado === "pendiente" && cancelando !== s.id && (
                     <button
@@ -195,7 +195,7 @@ export default function MisSolicitudes() {
                               <span className="flex-1 text-slate-800">{item.materia_origen_nombre}</span>
                               <SimilitudBadge valor={Number(item.similitud)} />
                               <span className={`px-2 py-0.5 rounded text-xs font-semibold ${estadoColor[item.estado]}`}>
-                                {item.estado}
+                                {estadoLabel[item.estado] ?? item.estado}
                               </span>
                               {item.comentario && (
                                 <span className="text-slate-500 italic text-xs">{item.comentario}</span>
