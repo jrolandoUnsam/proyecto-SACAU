@@ -35,7 +35,7 @@ interface Materia {
   nota: number | null;
   fecha: string | null;
   tipo: "examen" | "equivalencia";
-  origen?: string; // materia de origen (solo equivalencias)
+  origen?: string[]; // materias de origen (solo equivalencias)
   comentario?: string | null;
   estado?: "aprobada" | "aprobada_parcial";
 }
@@ -80,18 +80,26 @@ export default function Historial() {
       for (const eq of e.data) {
         const key = `${eq.universidad_destino_nombre}||${eq.carrera_destino_nombre}`;
         if (!map.has(key)) map.set(key, { universidad: eq.universidad_destino_nombre, carrera: eq.carrera_destino_nombre, materias: [] });
+        const grupo = map.get(key)!;
         for (const item of eq.items) {
-          map.get(key)!.materias.push({
-            key: `eq-${item.item_id}`,
-            nombre: item.materia_destino_nombre,
-            cre: item.materia_destino_cre,
-            nota: item.nota != null ? Number(item.nota) : null,
-            fecha: null,
-            tipo: "equivalencia",
-            origen: item.materia_origen_nombre,
-            comentario: item.comentario,
-            estado: item.estado,
-          });
+          const existing = grupo.materias.find(
+            (m) => m.tipo === "equivalencia" && m.nombre === item.materia_destino_nombre
+          );
+          if (existing) {
+            existing.origen = [...(existing.origen ?? []), item.materia_origen_nombre];
+          } else {
+            grupo.materias.push({
+              key: `eq-${item.item_id}`,
+              nombre: item.materia_destino_nombre,
+              cre: item.materia_destino_cre,
+              nota: item.nota != null ? Number(item.nota) : null,
+              fecha: null,
+              tipo: "equivalencia",
+              origen: [item.materia_origen_nombre],
+              comentario: item.comentario,
+              estado: item.estado,
+            });
+          }
         }
       }
 
@@ -144,16 +152,11 @@ export default function Historial() {
                 <tr key={m.key} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div className="text-slate-800 font-medium">{m.nombre}</div>
-                    {m.tipo === "equivalencia" && m.origen && (
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        Desde: <span className="italic">{m.origen}</span>
+                    {m.tipo === "equivalencia" && m.origen && m.origen.map((o, i) => (
+                      <div key={i} className="text-xs text-slate-400 mt-0.5">
+                        Desde: <span className="italic">{o}</span>
                       </div>
-                    )}
-                    {m.comentario && (
-                      <div className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded px-2 py-1 mt-1">
-                        {m.comentario}
-                      </div>
-                    )}
+                    ))}
                   </td>
                   <td className="px-4 py-3 text-center text-slate-500">{m.cre}</td>
                   <td className="px-4 py-3 text-center font-semibold text-slate-700">
