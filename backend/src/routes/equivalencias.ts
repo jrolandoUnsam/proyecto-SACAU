@@ -70,6 +70,33 @@ function dot(a: number[], b: number[]): number {
   return a.reduce((sum, v, i) => sum + v * b[i], 0);
 }
 
+router.get("/antecedentes", requireAuth, requireRole("evaluador"), async (req, res) => {
+  const materia_origen_id = Number(req.query.materia_origen_id);
+  const materia_destino_id = Number(req.query.materia_destino_id);
+  if (!materia_origen_id || !materia_destino_id)
+    return res.status(400).json({ error: "materia_origen_id y materia_destino_id requeridos" });
+
+  const { rows } = await query(
+    `SELECT
+       s.numero_tramite,
+       s.resuelta_en,
+       i.estado,
+       i.comentario,
+       i.nota,
+       u.nombre AS evaluador_nombre
+     FROM items_solicitud i
+     JOIN solicitudes_equivalencia s ON s.id = i.solicitud_id
+     LEFT JOIN usuarios u ON u.id = s.evaluador_id
+     WHERE i.materia_origen_id = $1
+       AND i.materia_destino_id = $2
+       AND i.estado <> 'pendiente'
+     ORDER BY s.resuelta_en DESC
+     LIMIT 20`,
+    [materia_origen_id, materia_destino_id]
+  );
+  res.json(rows);
+});
+
 router.post("/resaltado", requireAuth, async (req, res) => {
   const { materia_a_id, materia_b_id } = req.body as { materia_a_id?: number; materia_b_id?: number };
   if (!materia_a_id || !materia_b_id) return res.json({ frases_a: [], frases_b: [] });

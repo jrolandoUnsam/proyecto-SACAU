@@ -168,6 +168,82 @@ function ContenidoDestinoResaltado({ materiaDestinoId, texto, fuentes }: {
   return <p className="text-sm leading-relaxed">{texto}</p>;
 }
 
+interface Antecedente {
+  numero_tramite: string;
+  resuelta_en: string | null;
+  estado: string;
+  comentario: string | null;
+  nota: number | null;
+  evaluador_nombre: string | null;
+}
+
+const antecedenteBadge: Record<string, string> = {
+  aprobada: "bg-green-100 text-green-800",
+  aprobada_parcial: "bg-blue-100 text-blue-800",
+  rechazada: "bg-red-100 text-red-800",
+};
+const antecedenteLabel: Record<string, string> = {
+  aprobada: "Aprobada",
+  aprobada_parcial: "Aprobada parcialmente",
+  rechazada: "Rechazada",
+};
+
+function Antecedentes({ materiaOrigenId, materiaDestinoId }: { materiaOrigenId: number; materiaDestinoId: number }) {
+  const [datos, setDatos] = useState<Antecedente[] | null>(null);
+  const [abierto, setAbierto] = useState(false);
+
+  useEffect(() => {
+    api.get("/equivalencias/antecedentes", {
+      params: { materia_origen_id: materiaOrigenId, materia_destino_id: materiaDestinoId },
+    }).then((r) => setDatos(r.data));
+  }, [materiaOrigenId, materiaDestinoId]);
+
+  if (!datos || datos.length === 0) return null;
+
+  return (
+    <div className="border border-amber-200 rounded-lg bg-amber-50 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left text-sm font-medium text-amber-900 hover:bg-amber-100"
+      >
+        <span>Antecedentes — {datos.length} resolución{datos.length !== 1 ? "es" : ""} previa{datos.length !== 1 ? "s" : ""} para este par de materias</span>
+        <svg className={`w-4 h-4 transition-transform ${abierto ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {abierto && (
+        <ul className="divide-y divide-amber-200 border-t border-amber-200">
+          {datos.map((a, i) => (
+            <li key={i} className="px-3 py-2 flex items-start gap-3 text-sm">
+              <span className={`mt-0.5 px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${antecedenteBadge[a.estado] ?? "bg-slate-100 text-slate-700"}`}>
+                {antecedenteLabel[a.estado] ?? a.estado}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-slate-700">
+                  Trámite <span className="font-mono font-medium">{a.numero_tramite}</span>
+                  {a.nota != null && (
+                    <span className="ml-2 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold text-xs">Nota: {Number(a.nota).toFixed(0)}</span>
+                  )}
+                  {a.resuelta_en && (
+                    <span className="ml-2 text-slate-400 text-xs">{new Date(a.resuelta_en).toLocaleDateString("es-AR")}</span>
+                  )}
+                  {a.evaluador_nombre && (
+                    <span className="ml-2 text-slate-400 text-xs">· {a.evaluador_nombre}</span>
+                  )}
+                </div>
+                {a.comentario && (
+                  <div className="text-slate-500 text-xs mt-0.5 italic">"{a.comentario}"</div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function ResolverSolicitud() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -463,6 +539,10 @@ export default function ResolverSolicitud() {
                               materiaDestinoId={bloque.destinoId}
                               texto={it.contenido_origen}
                               colorClass={colorClass}
+                            />
+                            <Antecedentes
+                              materiaOrigenId={it.materia_origen_id}
+                              materiaDestinoId={bloque.destinoId}
                             />
                             {yaCerrada && it.comentario && (
                               <div className="mt-2 text-xs italic text-slate-500">{it.comentario}</div>
