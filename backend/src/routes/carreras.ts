@@ -1,10 +1,15 @@
 import { Router } from "express";
 import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { query, pool, vectorLiteral } from "../db";
 import { requireAuth, requireRole } from "../auth";
 import { embedText, embedBatch } from "../nlp";
 import { dividirFrases } from "../utils";
 import { extractPlanFromPdf } from "../planExtractor";
+
+const UPLOADS_DIR = path.join(__dirname, "../../uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -76,14 +81,19 @@ router.post(
       });
     }
 
+    const safeBase = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const pdfFilename = `${Date.now()}-${safeBase}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, pdfFilename), req.file.buffer);
+    const planPdfPath = `uploads/${pdfFilename}`;
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
 
       const { rows: [carrera] } = await client.query(
-        `INSERT INTO carreras (universidad_id, nombre, total_cre)
-         VALUES ($1, $2, $3) RETURNING id, nombre, total_cre, universidad_id`,
-        [universidadId, plan.carrera_nombre.trim(), plan.total_cre || null]
+        `INSERT INTO carreras (universidad_id, nombre, total_cre, plan_pdf)
+         VALUES ($1, $2, $3, $4) RETURNING id, nombre, total_cre, universidad_id`,
+        [universidadId, plan.carrera_nombre.trim(), plan.total_cre || null, planPdfPath]
       );
 
       for (const mat of plan.materias) {

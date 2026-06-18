@@ -103,9 +103,6 @@ export default function Historial() {
                     </div>
                   </div>
                 </div>
-                <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-semibold ${estadoColor[s.estado] ?? ""}`}>
-                  {estadoLabel[s.estado] ?? s.estado}
-                </span>
               </div>
             </button>
             {open === s.id && detalle && (
