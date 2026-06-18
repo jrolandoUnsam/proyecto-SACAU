@@ -53,6 +53,7 @@ export default function MisSolicitudes() {
   const [cancelando, setCancelando] = useState<number | null>(null);
   const [comentarioCancelacion, setComentarioCancelacion] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [descargandoId, setDescargandoId] = useState<number | null>(null);
 
   useEffect(() => {
     api.get("/solicitudes/mis").then((r) => setItems(r.data));
@@ -69,6 +70,24 @@ export default function MisSolicitudes() {
     e.stopPropagation();
     setCancelando(id);
     setComentarioCancelacion("");
+  }
+
+  async function descargarComprobante(id: number, tramite: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setDescargandoId(id);
+    try {
+      const { data } = await api.get(`/solicitudes/${id}/comprobante`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `comprobante-${tramite}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo descargar el comprobante.");
+    } finally {
+      setDescargandoId(null);
+    }
   }
 
   async function confirmarCancelacion(id: number) {
@@ -165,6 +184,20 @@ export default function MisSolicitudes() {
             )}
             {open === s.id && detalle && (
               <div className="border-t p-4">
+                {(s.estado === "aprobada" || s.estado === "aprobada_parcial" || s.estado === "rechazada") && (
+                  <div className="flex justify-end mb-3">
+                    <button
+                      onClick={(e) => descargarComprobante(s.id, s.numero_tramite, e)}
+                      disabled={descargandoId === s.id}
+                      className="flex items-center gap-1.5 text-xs bg-slate-700 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      {descargandoId === s.id ? "Descargando…" : "Descargar comprobante"}
+                    </button>
+                  </div>
+                )}
                 {detalle.evaluador_nombre && (
                   <div className="text-sm mb-2">
                     <b>Evaluador:</b> {detalle.evaluador_nombre}

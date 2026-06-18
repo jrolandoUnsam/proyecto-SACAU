@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool, query } from "../db";
 import { requireAuth, requireRole } from "../auth";
+import PDFDocument from "pdfkit";
 
 const router = Router();
 
@@ -319,6 +320,218 @@ router.put("/:id", requireAuth, requireRole("evaluador"), async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+router.get("/:id/comprobante", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+
+  const cab = await query(
+    `SELECT s.id, s.numero_tramite, s.estado, s.creada_en, s.resuelta_en, s.comentario_resolucion,
+            s.estudiante_id,
+            est.nombre AS estudiante_nombre, est.email AS estudiante_email, est.dni AS estudiante_dni,
+            c.nombre AS carrera_destino_nombre, u.nombre AS universidad_destino_nombre,
+            co.nombre AS carrera_origen_nombre, uo.nombre AS universidad_origen_nombre,
+            ev.nombre AS evaluador_nombre
+     FROM solicitudes_equivalencia s
+     JOIN usuarios est ON est.id = s.estudiante_id
+     JOIN carreras c ON c.id = s.carrera_destino_id
+     JOIN universidades u ON u.id = c.universidad_id
+     LEFT JOIN carreras co ON co.id = est.carrera_id
+     LEFT JOIN universidades uo ON uo.id = co.universidad_id
+     LEFT JOIN usuarios ev ON ev.id = s.evaluador_id
+     WHERE s.id = $1`,
+    [id]
+  );
+
+  if (cab.rows.length === 0) return res.status(404).json({ error: "no encontrada" });
+  const sol = cab.rows[0];
+
+  if (req.user!.rol === "estudiante" && sol.estudiante_id !== req.user!.id)
+    return res.status(403).json({ error: "no autorizada" });
+  if (sol.estado === "pendiente" || sol.estado === "cancelada")
+    return res.status(400).json({ error: "La solicitud no está resuelta aún" });
+
+  const its = await query(
+    `SELECT i.similitud, i.estado, i.comentario, i.nota,
+            mo.nombre AS materia_origen_nombre,
+            md.nombre AS materia_destino_nombre
+     FROM items_solicitud i
+     JOIN materias mo ON mo.id = i.materia_origen_id
+     JOIN materias md ON md.id = i.materia_destino_id
+     WHERE i.solicitud_id = $1
+     ORDER BY md.anio NULLS LAST, md.nombre`,
+    [id]
+  );
+
+  const ESTADO_LABEL: Record<string, string> = {
+    aprobada: "APROBADA",
+    aprobada_parcial: "APROBADA PARCIALMENTE",
+    rechazada: "RECHAZADA",
+  };
+  const ITEM_LABEL: Record<string, string> = {
+    aprobada: "Aprobada",
+    aprobada_parcial: "Aprob. parcial",
+    rechazada: "Rechazada",
+    pendiente: "Pendiente",
+  };
+  const ITEM_COLOR: Record<string, string> = {
+    aprobada: "#155724",
+    aprobada_parcial: "#004085",
+    rechazada: "#721c24",
+    pendiente: "#856404",
+  };
+  const RES_BG: Record<string, string> = {
+    aprobada: "#d4edda",
+    aprobada_parcial: "#cce5ff",
+    rechazada: "#f8d7da",
+  };
+  const RES_FG: Record<string, string> = {
+    aprobada: "#155724",
+    aprobada_parcial: "#004085",
+    rechazada: "#721c24",
+  };
+
+  const trunc = (s: string | null | undefined, n: number) =>
+    s && s.length > n ? s.slice(0, n - 1) + "…" : (s ?? "—");
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString("es-AR");
+
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="comprobante-${sol.numero_tramite}.pdf"`
+  );
+  doc.pipe(res);
+
+  // ─── HEADER ────────────────────────────────────────────────────────────
+  doc.rect(50, 50, 495, 56).fill("#1e3a5f");
+  doc.fillColor("white")
+    .fontSize(13).font("Helvetica-Bold")
+    .text("Comprobante de Resolución de Equivalencias", 62, 62, { width: 471 });
+  doc.fontSize(10).font("Helvetica")
+    .text("SUCU · Sistema Único de Créditos Unificados", 62, 82, { width: 471 });
+
+  // ─── N° TRÁMITE / FECHA ────────────────────────────────────────────────
+  doc.fillColor("black").fontSize(10);
+  doc.font("Helvetica-Bold").text("N° de trámite:", 50, 122);
+  doc.font("Helvetica").text(sol.numero_tramite, 150, 122);
+  if (sol.resuelta_en) {
+    doc.font("Helvetica-Bold").text("Fecha de resolución:", 325, 122);
+    doc.font("Helvetica").text(fmtDate(sol.resuelta_en), 463, 122);
+  }
+  doc.moveTo(50, 140).lineTo(545, 140).strokeColor("#cccccc").lineWidth(0.5).stroke();
+
+  // ─── DATOS DEL ESTUDIANTE ──────────────────────────────────────────────
+  doc.rect(50, 148, 495, 17).fill("#e8eef4");
+  doc.fillColor("#1e3a5f").fontSize(9).font("Helvetica-Bold")
+    .text("DATOS DEL ESTUDIANTE", 55, 154);
+  doc.fillColor("black").fontSize(10);
+  doc.font("Helvetica-Bold").text("Nombre:", 50, 175);
+  doc.font("Helvetica").text(sol.estudiante_nombre ?? "—", 115, 175);
+  doc.font("Helvetica-Bold").text("DNI:", 340, 175);
+  doc.font("Helvetica").text(sol.estudiante_dni ?? "—", 365, 175);
+  doc.font("Helvetica-Bold").text("Email:", 50, 191);
+  doc.font("Helvetica").text(sol.estudiante_email ?? "—", 115, 191);
+  doc.moveTo(50, 208).lineTo(545, 208).strokeColor("#cccccc").lineWidth(0.5).stroke();
+
+  // ─── TRANSFERENCIA ────────────────────────────────────────────────────
+  doc.rect(50, 216, 495, 17).fill("#e8eef4");
+  doc.fillColor("#1e3a5f").fontSize(9).font("Helvetica-Bold").text("TRANSFERENCIA", 55, 222);
+
+  const yB = 242;
+  doc.rect(50, yB, 218, 42).strokeColor("#b0c8e0").lineWidth(0.5).stroke();
+  doc.fillColor("#5a8fc0").fontSize(8).font("Helvetica-Bold").text("ORIGEN", 56, yB + 4);
+  doc.fillColor("#1a1a1a").fontSize(9).font("Helvetica-Bold")
+    .text(trunc(sol.universidad_origen_nombre, 32), 56, yB + 16, { width: 206, lineBreak: false });
+  doc.fontSize(8).font("Helvetica")
+    .text(trunc(sol.carrera_origen_nombre, 40), 56, yB + 29, { width: 206, lineBreak: false });
+
+  doc.fillColor("#666").fontSize(18).font("Helvetica")
+    .text("→", 276, yB + 13, { width: 36, align: "center", lineBreak: false });
+
+  doc.rect(317, yB, 228, 42).strokeColor("#80c8a0").lineWidth(0.5).stroke();
+  doc.fillColor("#3a8f60").fontSize(8).font("Helvetica-Bold").text("DESTINO", 323, yB + 4);
+  doc.fillColor("#1a1a1a").fontSize(9).font("Helvetica-Bold")
+    .text(trunc(sol.universidad_destino_nombre, 32), 323, yB + 16, { width: 218, lineBreak: false });
+  doc.fontSize(8).font("Helvetica")
+    .text(trunc(sol.carrera_destino_nombre, 40), 323, yB + 29, { width: 218, lineBreak: false });
+
+  // ─── RESULTADO ────────────────────────────────────────────────────────
+  const yRes = 298;
+  doc.rect(50, yRes, 495, 28).fill(RES_BG[sol.estado] ?? "#f0f0f0");
+  doc.fillColor(RES_FG[sol.estado] ?? "#333")
+    .fontSize(12).font("Helvetica-Bold")
+    .text(
+      `RESULTADO: ${ESTADO_LABEL[sol.estado] ?? sol.estado.toUpperCase()}`,
+      55, yRes + 8, { width: 485, align: "center", lineBreak: false }
+    );
+
+  let yCur = yRes + 36;
+  doc.fillColor("black").fontSize(10);
+
+  if (sol.evaluador_nombre) {
+    doc.font("Helvetica-Bold").text("Evaluador: ", 50, yCur, { continued: true });
+    doc.font("Helvetica").text(sol.evaluador_nombre);
+    yCur = doc.y + 3;
+  }
+  if (sol.comentario_resolucion) {
+    doc.font("Helvetica-Bold").text("Comentario: ", 50, yCur, { continued: true });
+    doc.font("Helvetica-Oblique").text(sol.comentario_resolucion, { width: 490 });
+    yCur = doc.y + 3;
+  }
+  yCur += 10;
+
+  // ─── TABLA DE MATERIAS ────────────────────────────────────────────────
+  doc.rect(50, yCur, 495, 17).fill("#e8eef4");
+  doc.fillColor("#1e3a5f").fontSize(9).font("Helvetica-Bold")
+    .text("DETALLE DE MATERIAS", 55, yCur + 5);
+  yCur += 19;
+
+  const X = [50, 198, 346, 406, 463];
+  const W = [146, 146, 58, 55, 82];
+  const HEADERS = ["Materia Destino", "Materia Origen", "Similitud", "Estado", "Nota"];
+  const ROW_H = 16;
+
+  doc.rect(50, yCur, 495, ROW_H).fill("#d0dde8");
+  doc.fillColor("#1e3a5f").fontSize(8).font("Helvetica-Bold");
+  for (let i = 0; i < HEADERS.length; i++) {
+    doc.text(HEADERS[i], X[i] + 3, yCur + 4, { width: W[i] - 4, lineBreak: false });
+  }
+  yCur += ROW_H;
+
+  for (let idx = 0; idx < its.rows.length; idx++) {
+    const item = its.rows[idx];
+    if (yCur + ROW_H > 780) {
+      doc.addPage();
+      yCur = 50;
+    }
+    if (idx % 2 === 1) doc.rect(50, yCur, 495, ROW_H).fill("#f4f7fb");
+
+    const sim = `${Math.round(Number(item.similitud) * 100)}%`;
+    const nota = item.nota != null ? Number(item.nota).toFixed(1) : "—";
+
+    doc.fillColor("black").fontSize(8).font("Helvetica-Bold")
+      .text(trunc(item.materia_destino_nombre, 24), X[0] + 3, yCur + 4, { width: W[0] - 4, lineBreak: false });
+    doc.font("Helvetica")
+      .text(trunc(item.materia_origen_nombre, 24), X[1] + 3, yCur + 4, { width: W[1] - 4, lineBreak: false });
+    doc.text(sim, X[2] + 3, yCur + 4, { width: W[2] - 4, lineBreak: false });
+    doc.fillColor(ITEM_COLOR[item.estado] ?? "#333").font("Helvetica-Bold")
+      .text(ITEM_LABEL[item.estado] ?? item.estado, X[3] + 3, yCur + 4, { width: W[3] - 4, lineBreak: false });
+    doc.fillColor("black").font("Helvetica")
+      .text(nota, X[4] + 3, yCur + 4, { width: W[4] - 4, lineBreak: false });
+    yCur += ROW_H;
+  }
+
+  // ─── FOOTER ───────────────────────────────────────────────────────────
+  const yFoot = (doc.page.height as number) - 55;
+  doc.moveTo(50, yFoot).lineTo(545, yFoot).strokeColor("#dddddd").lineWidth(0.5).stroke();
+  doc.fillColor("#aaaaaa").fontSize(8).font("Helvetica")
+    .text(
+      `Generado el ${fmtDate(new Date().toISOString())} · SUCU — Sistema Único de Créditos Unificados`,
+      50, yFoot + 8, { width: 495, align: "center" }
+    );
+
+  doc.end();
 });
 
 export default router;
