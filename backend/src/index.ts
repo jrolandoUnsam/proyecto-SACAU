@@ -29,7 +29,7 @@ app.use("/api/equivalencias", equivalenciasRouter);
 app.use("/api/solicitudes", solicitudesRouter);
 app.use("/api/perfil", perfilRouter);
 app.use("/api/admin", adminRouter);
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/api/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[error]", err);

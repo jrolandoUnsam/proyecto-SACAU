@@ -87,10 +87,10 @@ const USUARIOS: Array<{
   {
     dni: "28000002",
     password: "eval123",
-    email: "evaluador@unahur.edu.ar",
+    email: "evaluador@belgrano.edu.ar",
     nombre: "Carlos Evaluador",
     rol: "evaluador",
-    universidad: UNAHUR_UNIVERSIDAD,
+    universidad: BELGRANO_UNIVERSIDAD,
   },
   {
     dni: "42000003",
@@ -205,18 +205,17 @@ export async function runSeed(): Promise<void> {
         const uniId = us.universidad ? universidadIds.get(us.universidad) ?? null : null;
         const carId = us.universidad && us.carrera ? carreraIds.get(`${us.universidad}::${us.carrera}`) ?? null : null;
         const passwordHash = bcrypt.hashSync(us.password, 10);
-        const u = await client.query(
+        await client.query(
           `INSERT INTO usuarios (dni, password_hash, email, nombre, rol, universidad_id, carrera_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (dni) DO NOTHING
-           RETURNING id`,
+           ON CONFLICT (dni) DO UPDATE SET universidad_id = EXCLUDED.universidad_id`,
           [us.dni, passwordHash, us.email, us.nombre, us.rol, uniId, carId]
         );
-        if (u.rows.length === 0 && carId) {
-          const { rows } = await client.query(`SELECT id FROM usuarios WHERE dni = $1`, [us.dni]);
-          if (rows.length > 0) {
-            await client.query(`UPDATE usuarios SET carrera_id = $1 WHERE id = $2 AND carrera_id IS NULL`, [carId, rows[0].id]);
-          }
+        if (carId) {
+          await client.query(
+            `UPDATE usuarios SET carrera_id = $1 WHERE dni = $2 AND carrera_id IS NULL`,
+            [carId, us.dni]
+          );
         }
       }
 

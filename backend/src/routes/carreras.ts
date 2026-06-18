@@ -84,7 +84,7 @@ router.post(
     const safeBase = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
     const pdfFilename = `${Date.now()}-${safeBase}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, pdfFilename), req.file.buffer);
-    const planPdfPath = `uploads/${pdfFilename}`;
+    const planPdfPath = `api/uploads/${pdfFilename}`;
 
     const client = await pool.connect();
     try {
