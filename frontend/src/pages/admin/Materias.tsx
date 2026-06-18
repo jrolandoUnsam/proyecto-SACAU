@@ -17,6 +17,8 @@ export default function Materias() {
   const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [parseBusy, setParseBusy] = useState(false);
+  const [parseMsg, setParseMsg] = useState<string | null>(null);
 
   useEffect(() => {
     api.get("/carreras").then((r) => setCarreras(r.data));
@@ -26,6 +28,23 @@ export default function Materias() {
     if (!carreraId) { setMaterias([]); return; }
     api.get(`/carreras/${carreraId}/materias`).then((r) => setMaterias(r.data));
   }, [carreraId]);
+
+  async function parsePdf() {
+    if (!pdf) return;
+    setParseBusy(true);
+    setParseMsg(null);
+    try {
+      const form = new FormData();
+      form.append("pdf", pdf);
+      const { data } = await api.post("/materias/parse-pdf", form, { headers: { "Content-Type": "multipart/form-data" } });
+      setContenido(data.texto);
+      setParseMsg("Contenido extraído por IA. Revisá y completá los demás campos antes de crear la materia.");
+    } catch (e: any) {
+      setParseMsg(e?.response?.data?.error || "Error al procesar el PDF");
+    } finally {
+      setParseBusy(false);
+    }
+  }
 
   async function crear(e: FormEvent) {
     e.preventDefault();
@@ -101,12 +120,40 @@ export default function Materias() {
               <input value={horasAut} onChange={(e) => setHorasAut(e.target.value)} placeholder="Horas autónomo" type="number"
                 className="border border-slate-300 rounded px-3 py-2 text-sm" />
             </div>
-            <textarea value={contenido} onChange={(e) => setContenido(e.target.value)}
-              placeholder="Contenido / programa de la materia (si no subís PDF)" rows={5}
-              className="w-full border border-slate-300 rounded px-3 py-2 text-sm" />
-            <div>
-              <label className="text-sm block mb-1">PDF del programa (opcional, sobrescribe el texto)</label>
-              <input type="file" accept="application/pdf" onChange={(e) => setPdf(e.target.files?.[0] || null)} />
+            <div className="col-span-2 border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+              <p className="text-sm font-medium text-slate-700">Programa / contenido</p>
+              <p className="text-xs text-slate-500">Subí el PDF del programa y la IA extrae el contenido, o escribilo manualmente.</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => { setPdf(e.target.files?.[0] || null); setParseMsg(null); }}
+                  className="text-sm text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:bg-white file:text-slate-700 file:border file:border-slate-300 hover:file:bg-slate-100"
+                />
+                <button
+                  type="button"
+                  onClick={parsePdf}
+                  disabled={!pdf || parseBusy}
+                  className="flex items-center gap-2 bg-slate-900 text-white rounded px-3 py-1.5 text-sm disabled:opacity-50"
+                >
+                  {parseBusy && (
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {parseBusy ? "Procesando con IA…" : "Subir y procesar PDF"}
+                </button>
+              </div>
+              {parseMsg && (
+                <p className={`text-xs rounded px-2 py-1.5 ${parseMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                  {parseMsg}
+                </p>
+              )}
+              <textarea
+                value={contenido}
+                onChange={(e) => setContenido(e.target.value)}
+                placeholder="El contenido extraído del PDF aparecerá aquí, o escribilo manualmente"
+                rows={5}
+                className="w-full border border-slate-300 rounded px-3 py-2 text-sm bg-white"
+              />
             </div>
             {msg && <div className="text-sm">{msg}</div>}
             <button type="submit" disabled={busy} className="bg-slate-900 text-white rounded px-4 py-2 disabled:opacity-50">

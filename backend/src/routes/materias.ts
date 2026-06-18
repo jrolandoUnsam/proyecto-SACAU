@@ -8,6 +8,16 @@ import { dividirFrases } from "../utils";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+router.post("/parse-pdf", requireAuth, requireRole("administrador"), upload.single("pdf"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Se requiere un archivo PDF" });
+  try {
+    const { text } = await embedPdf(req.file.buffer, req.file.originalname || "programa.pdf");
+    res.json({ texto: text });
+  } catch (err: any) {
+    res.status(502).json({ error: "No se pudo extraer texto del PDF", detail: err?.message || String(err) });
+  }
+});
+
 router.post("/", requireAuth, requireRole("administrador"), upload.single("pdf"), async (req, res) => {
   const body = req.body as Record<string, string | undefined>;
   const carrera_id = Number(body.carrera_id);

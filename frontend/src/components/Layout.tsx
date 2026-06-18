@@ -50,6 +50,9 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <NavLink to="/admin/carreras" className={linkClass}>
                     Mis carreras
                   </NavLink>
+                  <NavLink to="/admin/materias" className={linkClass}>
+                    Materias
+                  </NavLink>
                   <NavLink to="/admin/subir-carrera" className={linkClass}>
                     Subir carrera
                   </NavLink>
