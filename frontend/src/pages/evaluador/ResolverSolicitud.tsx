@@ -198,7 +198,15 @@ function Antecedentes({ materiaOrigenId, materiaDestinoId }: { materiaOrigenId: 
     }).then((r) => setDatos(r.data));
   }, [materiaOrigenId, materiaDestinoId]);
 
-  if (!datos || datos.length === 0) return null;
+  if (!datos) return null;
+
+  if (datos.length === 0) {
+    return (
+      <div className="text-xs text-slate-400 italic px-1 py-1">
+        Sin antecedentes previos para este par de materias.
+      </div>
+    );
+  }
 
   return (
     <div className="border border-amber-200 rounded-lg bg-amber-50 overflow-hidden">
