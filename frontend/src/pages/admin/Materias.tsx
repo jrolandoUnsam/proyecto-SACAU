@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../../api";
+import { useAuth } from "../../auth";
 
 interface Carrera { id: number; nombre: string; universidad_nombre: string; universidad_id: number; }
 interface Materia { id: number; nombre: string; cre: number; horas_interaccion: number | null; horas_autonomo: number | null; contenido_texto: string | null; }
 
 export default function Materias() {
+  const { user } = useAuth();
   const [carreras, setCarreras] = useState<Carrera[]>([]);
   const [carreraId, setCarreraId] = useState<number | "">("");
   const [materias, setMaterias] = useState<Materia[]>([]);
@@ -21,8 +23,9 @@ export default function Materias() {
   const [parseMsg, setParseMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get("/carreras").then((r) => setCarreras(r.data));
-  }, []);
+    if (!user?.universidad_id) return;
+    api.get("/carreras", { params: { universidad_id: user.universidad_id } }).then((r) => setCarreras(r.data));
+  }, [user?.universidad_id]);
 
   useEffect(() => {
     if (!carreraId) { setMaterias([]); return; }
