@@ -160,7 +160,7 @@ export default function Historial() {
                   </td>
                   <td className="px-4 py-3 text-center text-slate-500">{m.cre}</td>
                   <td className="px-4 py-3 text-center font-semibold text-slate-700">
-                    {m.nota !== null ? m.nota : "—"}
+                    {m.tipo === "equivalencia" && m.estado === "aprobada_parcial" ? "—" : m.nota !== null ? m.nota : "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {m.tipo === "examen" ? (
