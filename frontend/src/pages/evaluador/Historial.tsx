@@ -145,19 +145,26 @@ export default function Historial() {
                         <div className="space-y-2">
                           {Array.from(porDestino.entries()).map(([destNombre, grupo]) => (
                             <div key={destNombre} className="border border-slate-200 rounded-lg overflow-hidden">
-                              <div className="bg-slate-50 px-4 py-2 font-semibold text-slate-700 text-sm">
-                                {destNombre}
+                              <div className="bg-slate-50 px-4 py-2 flex items-center justify-between gap-3">
+                                <span className="font-semibold text-slate-700 text-sm">{destNombre}</span>
+                                <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-semibold ${estadoColor[grupo[0].estado] ?? ""}`}>
+                                  {estadoLabel[grupo[0].estado] ?? grupo[0].estado}
+                                </span>
                               </div>
                               <div className="divide-y divide-slate-100">
                                 {grupo.map((item) => (
-                                  <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                                    <span className="flex-1 text-slate-800">{item.materia_origen_nombre}</span>
-                                    <SimilitudBadge valor={Number(item.similitud)} />
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${estadoColor[item.estado] ?? ""}`}>
-                                      {estadoLabel[item.estado] ?? item.estado}
-                                    </span>
+                                  <div key={item.id} className="px-4 py-2.5 text-sm">
+                                    <div className="flex items-center gap-3">
+                                      <span className="flex-1 text-slate-600">{item.materia_origen_nombre}</span>
+                                      <SimilitudBadge valor={Number(item.similitud)} />
+                                    </div>
                                     {item.comentario && (
-                                      <span className="text-slate-500 italic text-xs">{item.comentario}</span>
+                                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                        <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {item.comentario}
+                                      </div>
                                     )}
                                   </div>
                                 ))}
